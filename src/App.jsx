@@ -57,10 +57,11 @@ const LINE_COLORS = ['#6366f1', '#f97316', '#8b5cf6', '#10b981', '#ef4444', '#fa
 
 // ─── GLOBAL STYLES ────────────────────────────────────────────────────────────
 const globalStyles = `
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;600;700&display=swap');
 
   * { font-family: 'DM Sans', sans-serif; }
   .font-display { font-family: 'Syne', sans-serif; }
+  .font-mono { font-family: 'JetBrains Mono', monospace; }
 
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(20px); }
@@ -709,100 +710,7 @@ export default function App() {
 
           {/* DASHBOARD */}
           {activeTab === 'dashboard' && (
-            <div className="space-y-5">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard title="Total Egresos" value={fmt(stats.grandTotal)} icon={DollarSign} color="indigo" />
-                <StatCard title="Unidades" value={trucks.length} subtitle="Activas" icon={Truck} color="slate" />
-                <StatCard title="Operaciones" value={stats.totalExpenses} subtitle="Registradas" icon={RotateCcw} color="orange" />
-                <StatCard title="Promedio x Unidad" value={fmt(stats.grandTotal / (trucks.length || 1))} icon={TrendingUp} color="violet" />
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                <div className="lg:col-span-2 chart-card p-6 rounded-[24px]">
-                  <div className="flex items-center justify-between mb-5">
-                    <h3 className="font-display font-bold text-sm uppercase tracking-tight text-slate-800">Costos por Unidad</h3>
-                    <div className="flex gap-3">
-                      <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full" style={{ background: '#4f46e5' }} /><span className="text-[8px] font-bold uppercase text-slate-400">Fijos</span></div>
-                      <div className="flex items-center gap-1.5"><div className="w-2 h-2 bg-orange-500 rounded-full" /><span className="text-[8px] font-bold uppercase text-slate-400">Variables</span></div>
-                    </div>
-                  </div>
-                  <div className="h-[260px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={stats.truckStats}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="patente" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: '700', fill: '#94a3b8' }} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: '600', fill: '#94a3b8' }} tickFormatter={v => `$${v / 1000}k`} />
-                        <Tooltip content={<CustomBarTooltip fmt={fmt} />} />
-                        <Bar dataKey="fixTotal" stackId="a" fill="#4f46e5" name="Fijos" />
-                        <Bar dataKey="varTotal" stackId="a" fill="#f97316" radius={[5, 5, 0, 0]} name="Variables" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                <div className="chart-card p-6 rounded-[24px]">
-                  <h3 className="font-display font-bold text-sm uppercase mb-5 tracking-tight text-slate-800">Combustible vs Mant.</h3>
-                  <div className="h-[220px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={stats.pieData} innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value">
-                          <Cell fill="#f97316" />
-                          <Cell fill="#4f46e5" />
-                        </Pie>
-                        <Tooltip formatter={v => fmt(v)} />
-                        <Legend wrapperStyle={{ fontSize: '8px', fontWeight: '700', textTransform: 'uppercase' }} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-
-              {stats.trendData.length > 1 && (
-                <div className="chart-card p-6 rounded-[24px]">
-                  <h3 className="font-display font-bold text-sm uppercase tracking-tight text-slate-800 mb-5">Tendencia Mensual</h3>
-                  <div className="h-[220px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={stats.trendData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: '600', fill: '#94a3b8' }} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: '600', fill: '#94a3b8' }} tickFormatter={v => `$${v / 1000}k`} />
-                        <Tooltip formatter={v => fmt(v)} />
-                        <Line type="monotone" dataKey="combustible" stroke="#f97316" strokeWidth={2.5} dot={{ fill: '#f97316', r: 4 }} name="Combustible" />
-                        <Line type="monotone" dataKey="mantenimiento" stroke="#4f46e5" strokeWidth={2.5} dot={{ fill: '#4f46e5', r: 4 }} name="Mantenimiento" />
-                        <Legend wrapperStyle={{ fontSize: '8px', fontWeight: '700', textTransform: 'uppercase' }} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
-              {stats.ranking.length > 0 && (
-                <div className="chart-card p-6 rounded-[24px]">
-                  <h3 className="font-display font-bold text-sm uppercase tracking-tight text-slate-800 mb-4">🏆 Ranking — Mayor Gasto</h3>
-                  <div className="space-y-3">
-                    {stats.ranking.map((t, i) => {
-                      const pct = stats.grandTotal > 0 ? (t.total / stats.grandTotal) * 100 : 0;
-                      const medals = ['🥇', '🥈', '🥉'];
-                      return (
-                        <div key={t.id} className="flex items-center gap-3">
-                          <span className="text-base w-6 shrink-0">{medals[i] || `${i + 1}.`}</span>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex justify-between items-center mb-1">
-                              <span className="text-[10px] font-bold uppercase">{t.patente} <span className="font-normal text-slate-400">{t.chofer}</span></span>
-                              <span className="text-[10px] font-bold indigo-accent shrink-0 ml-2">{fmt(t.total)}</span>
-                            </div>
-                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                              <div className="rank-bar h-full rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
-                            </div>
-                            <span className="text-[7px] text-slate-400 font-medium">{pct.toFixed(1)}% del total</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
+            <DashboardPanel stats={stats} trucks={trucks} fmt={fmt} />
           )}
 
           {/* FLOTA */}
@@ -1351,6 +1259,350 @@ function ExpenseModal({ trucks, onSubmit, onClose }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── DASHBOARD PANEL ──────────────────────────────────────────────────────────
+function DashboardPanel({ stats, trucks, fmt }) {
+  const combustiblePct = stats.grandTotal > 0
+    ? ((stats.pieData.find(d => d.name === 'Combustible')?.value || 0) / stats.grandTotal * 100).toFixed(1)
+    : 0;
+  const mantenimientoPct = stats.grandTotal > 0
+    ? ((stats.pieData.find(d => d.name === 'Mantenimiento')?.value || 0) / stats.grandTotal * 100).toFixed(1)
+    : 0;
+
+  return (
+    <div className="space-y-6">
+
+      {/* ── FILA 1: KPI STRIP ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Egresos — destacado */}
+        <div className="col-span-2 lg:col-span-1 relative overflow-hidden rounded-2xl p-5 flex flex-col justify-between"
+          style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)', minHeight: 130 }}>
+          <div className="absolute inset-0 opacity-10"
+            style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, #6366f1 0%, transparent 60%)' }} />
+          <div className="relative">
+            <div className="flex items-center justify-between mb-3">
+              <div className="p-2 rounded-xl" style={{ background: 'rgba(99,102,241,0.2)' }}>
+                <DollarSign size={14} style={{ color: '#818cf8' }} />
+              </div>
+              <span className="text-[7px] font-bold uppercase tracking-widest px-2 py-1 rounded-full"
+                style={{ color: '#818cf8', background: 'rgba(99,102,241,0.15)' }}>Período</span>
+            </div>
+            <p className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Total Egresos</p>
+            <p className="font-display font-extrabold text-2xl tracking-tight text-white leading-none">{fmt(stats.grandTotal)}</p>
+          </div>
+        </div>
+
+        {/* Unidades */}
+        <KpiCard
+          label="Unidades Activas"
+          value={trucks.length}
+          Icon={Truck}
+          accent="#4f46e5"
+          accentBg="#eef2ff"
+          accentBorder="#c7d2fe"
+          suffix="unidades"
+        />
+        {/* Operaciones */}
+        <KpiCard
+          label="Operaciones"
+          value={stats.totalExpenses}
+          Icon={RotateCcw}
+          accent="#f97316"
+          accentBg="#fff7ed"
+          accentBorder="#fed7aa"
+          suffix="registros"
+        />
+        {/* Promedio */}
+        <KpiCard
+          label="Promedio por Unidad"
+          value={fmt(stats.grandTotal / (trucks.length || 1))}
+          Icon={TrendingUp}
+          accent="#7c3aed"
+          accentBg="#f5f3ff"
+          accentBorder="#ddd6fe"
+          mono
+        />
+      </div>
+
+      {/* ── FILA 2: DISTRIBUCIÓN RÁPIDA ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Combustible */}
+        <div className="rounded-2xl p-5 border" style={{ background: '#fff7ed', borderColor: '#fed7aa' }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: '#f97316' }}>
+                <span className="text-white text-sm">⛽</span>
+              </div>
+              <div>
+                <p className="text-[8px] font-bold uppercase tracking-wider text-orange-400">Combustible</p>
+                <p className="text-[10px] font-bold text-orange-600">{combustiblePct}% del total</p>
+              </div>
+            </div>
+          </div>
+          <p className="font-display font-extrabold text-xl tracking-tight" style={{ color: '#c2410c' }}>
+            {fmt(stats.pieData.find(d => d.name === 'Combustible')?.value || 0)}
+          </p>
+          <div className="mt-3 h-1.5 rounded-full" style={{ background: '#fed7aa' }}>
+            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${combustiblePct}%`, background: 'linear-gradient(90deg, #fb923c, #f97316)' }} />
+          </div>
+        </div>
+
+        {/* Mantenimiento */}
+        <div className="rounded-2xl p-5 border" style={{ background: '#eef2ff', borderColor: '#c7d2fe' }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: '#4f46e5' }}>
+                <span className="text-white text-sm">🔧</span>
+              </div>
+              <div>
+                <p className="text-[8px] font-bold uppercase tracking-wider text-indigo-400">Mantenimiento</p>
+                <p className="text-[10px] font-bold text-indigo-600">{mantenimientoPct}% del total</p>
+              </div>
+            </div>
+          </div>
+          <p className="font-display font-extrabold text-xl tracking-tight" style={{ color: '#3730a3' }}>
+            {fmt(stats.pieData.find(d => d.name === 'Mantenimiento')?.value || 0)}
+          </p>
+          <div className="mt-3 h-1.5 rounded-full" style={{ background: '#c7d2fe' }}>
+            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${mantenimientoPct}%`, background: 'linear-gradient(90deg, #818cf8, #4f46e5)' }} />
+          </div>
+        </div>
+
+        {/* Costos fijos totales */}
+        <div className="rounded-2xl p-5 border" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: '#16a34a' }}>
+              <Shield size={14} className="text-white" />
+            </div>
+            <div>
+              <p className="text-[8px] font-bold uppercase tracking-wider text-green-500">Costos Fijos</p>
+              <p className="text-[10px] font-bold text-green-600">Seguros + VTV + Hab.</p>
+            </div>
+          </div>
+          <p className="font-display font-extrabold text-xl tracking-tight" style={{ color: '#15803d' }}>
+            {fmt(stats.truckStats.reduce((a, t) => a + t.fixTotal, 0))}
+          </p>
+          <div className="mt-3 h-1.5 rounded-full" style={{ background: '#bbf7d0' }}>
+            <div className="h-full rounded-full" style={{
+              width: stats.grandTotal > 0 ? `${(stats.truckStats.reduce((a,t)=>a+t.fixTotal,0)/stats.grandTotal*100).toFixed(1)}%` : '0%',
+              background: 'linear-gradient(90deg, #4ade80, #16a34a)'
+            }} />
+          </div>
+        </div>
+      </div>
+
+      {/* ── FILA 3: GRÁFICOS PRINCIPALES ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+
+        {/* Costos por unidad — ocupa 3 columnas */}
+        <div className="lg:col-span-3 bg-white rounded-2xl border p-6" style={{ borderColor: 'rgba(99,102,241,0.1)', boxShadow: '0 2px 20px rgba(0,0,0,0.04)' }}>
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <h3 className="font-display font-bold text-base text-slate-800 uppercase tracking-tight">Costos por Unidad</h3>
+              <p className="text-[10px] text-slate-400 font-medium mt-0.5">Fijos + Variables del período</p>
+            </div>
+            <div className="flex gap-3">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-sm" style={{ background: '#4f46e5' }} />
+                <span className="text-[9px] font-bold uppercase text-slate-400">Fijos</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-sm bg-orange-500" />
+                <span className="text-[9px] font-bold uppercase text-slate-400">Variables</span>
+              </div>
+            </div>
+          </div>
+          <div className="h-[240px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stats.truckStats} barSize={36}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
+                <XAxis dataKey="patente" axisLine={false} tickLine={false}
+                  tick={{ fontSize: 10, fontWeight: '700', fill: '#64748b', fontFamily: 'Syne' }} />
+                <YAxis axisLine={false} tickLine={false}
+                  tick={{ fontSize: 9, fontWeight: '500', fill: '#94a3b8' }}
+                  tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                <Tooltip content={<CustomBarTooltip fmt={fmt} />} />
+                <Bar dataKey="fixTotal" stackId="a" fill="#4f46e5" name="Fijos" />
+                <Bar dataKey="varTotal" stackId="a" fill="#f97316" radius={[6, 6, 0, 0]} name="Variables" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Donut — ocupa 2 columnas */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border p-6 flex flex-col" style={{ borderColor: 'rgba(99,102,241,0.1)', boxShadow: '0 2px 20px rgba(0,0,0,0.04)' }}>
+          <div className="mb-4">
+            <h3 className="font-display font-bold text-base text-slate-800 uppercase tracking-tight">Distribución</h3>
+            <p className="text-[10px] text-slate-400 font-medium mt-0.5">Combustible vs Mantenimiento</p>
+          </div>
+          <div className="flex-1 flex items-center justify-center">
+            <div className="h-[180px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={stats.pieData} innerRadius={55} outerRadius={75} paddingAngle={4} dataKey="value"
+                    strokeWidth={0}>
+                    <Cell fill="#f97316" />
+                    <Cell fill="#4f46e5" />
+                  </Pie>
+                  <Tooltip formatter={v => fmt(v)} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          {/* Leyenda manual más legible */}
+          <div className="space-y-2 mt-2">
+            {[
+              { label: 'Combustible', value: stats.pieData.find(d=>d.name==='Combustible')?.value||0, color: '#f97316', bg: '#fff7ed' },
+              { label: 'Mantenimiento', value: stats.pieData.find(d=>d.name==='Mantenimiento')?.value||0, color: '#4f46e5', bg: '#eef2ff' }
+            ].map(item => (
+              <div key={item.label} className="flex items-center justify-between rounded-xl px-3 py-2" style={{ background: item.bg }}>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full" style={{ background: item.color }} />
+                  <span className="text-[9px] font-bold uppercase" style={{ color: item.color }}>{item.label}</span>
+                </div>
+                <span className="font-mono text-[10px] font-bold text-slate-700">{fmt(item.value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── FILA 4: TENDENCIA MENSUAL ── */}
+      {stats.trendData.length > 1 && (
+        <div className="bg-white rounded-2xl border p-6" style={{ borderColor: 'rgba(99,102,241,0.1)', boxShadow: '0 2px 20px rgba(0,0,0,0.04)' }}>
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <h3 className="font-display font-bold text-base text-slate-800 uppercase tracking-tight">Tendencia Mensual</h3>
+              <p className="text-[10px] text-slate-400 font-medium mt-0.5">Evolución de costos — últimos 6 meses</p>
+            </div>
+            <div className="flex gap-4">
+              <div className="flex items-center gap-1.5">
+                <div className="w-6 h-0.5 rounded-full" style={{ background: '#f97316' }} />
+                <span className="text-[9px] font-bold uppercase text-slate-400">Combustible</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-6 h-0.5 rounded-full" style={{ background: '#4f46e5' }} />
+                <span className="text-[9px] font-bold uppercase text-slate-400">Mantenimiento</span>
+              </div>
+            </div>
+          </div>
+          <div className="h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={stats.trendData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
+                <XAxis dataKey="mes" axisLine={false} tickLine={false}
+                  tick={{ fontSize: 10, fontWeight: '600', fill: '#94a3b8' }} />
+                <YAxis axisLine={false} tickLine={false}
+                  tick={{ fontSize: 9, fontWeight: '500', fill: '#94a3b8' }}
+                  tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                <Tooltip
+                  contentStyle={{ background: '#0f172a', border: 'none', borderRadius: 12, color: 'white', fontSize: 11 }}
+                  formatter={v => [fmt(v)]}
+                />
+                <Line type="monotone" dataKey="combustible" stroke="#f97316" strokeWidth={2.5}
+                  dot={{ fill: '#f97316', r: 4, strokeWidth: 2, stroke: 'white' }} name="Combustible" />
+                <Line type="monotone" dataKey="mantenimiento" stroke="#4f46e5" strokeWidth={2.5}
+                  dot={{ fill: '#4f46e5', r: 4, strokeWidth: 2, stroke: 'white' }} name="Mantenimiento" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* ── FILA 5: RANKING ── */}
+      {stats.ranking.length > 0 && (
+        <div className="bg-white rounded-2xl border p-6" style={{ borderColor: 'rgba(99,102,241,0.1)', boxShadow: '0 2px 20px rgba(0,0,0,0.04)' }}>
+          <div className="mb-5">
+            <h3 className="font-display font-bold text-base text-slate-800 uppercase tracking-tight">Ranking de Unidades</h3>
+            <p className="text-[10px] text-slate-400 font-medium mt-0.5">Ordenadas por mayor egreso en el período</p>
+          </div>
+
+          {/* Header de tabla */}
+          <div className="grid grid-cols-12 gap-2 px-3 mb-2">
+            <span className="col-span-1 text-[8px] font-bold uppercase text-slate-400">#</span>
+            <span className="col-span-3 text-[8px] font-bold uppercase text-slate-400">Unidad</span>
+            <span className="col-span-4 text-[8px] font-bold uppercase text-slate-400">Distribución</span>
+            <span className="col-span-2 text-[8px] font-bold uppercase text-slate-400 text-right">Total</span>
+            <span className="col-span-2 text-[8px] font-bold uppercase text-slate-400 text-right">% Flota</span>
+          </div>
+
+          <div className="space-y-2">
+            {stats.ranking.map((t, i) => {
+              const pct = stats.grandTotal > 0 ? (t.total / stats.grandTotal) * 100 : 0;
+              const fixPct = t.total > 0 ? (t.fixTotal / t.total * 100) : 0;
+              const varPct = t.total > 0 ? (t.varTotal / t.total * 100) : 0;
+              const medals = ['🥇', '🥈', '🥉'];
+              const rowBg = i === 0 ? 'rgba(99,102,241,0.04)' : 'transparent';
+              return (
+                <div key={t.id} className="grid grid-cols-12 gap-2 items-center px-3 py-3 rounded-xl transition-colors"
+                  style={{ background: rowBg, border: i === 0 ? '1px solid rgba(99,102,241,0.12)' : '1px solid transparent' }}>
+                  <span className="col-span-1 text-base">{medals[i] || <span className="font-mono font-bold text-slate-400 text-xs">{i+1}</span>}</span>
+                  <div className="col-span-3">
+                    <p className="font-display font-bold text-xs uppercase text-slate-800">{t.patente}</p>
+                    <p className="text-[9px] text-slate-400 font-medium truncate">{t.chofer}</p>
+                  </div>
+                  <div className="col-span-4">
+                    <div className="h-2 rounded-full overflow-hidden flex" style={{ background: '#f1f5f9' }}>
+                      <div className="h-full" style={{ width: `${fixPct}%`, background: '#4f46e5' }} />
+                      <div className="h-full" style={{ width: `${varPct}%`, background: '#f97316' }} />
+                    </div>
+                    <div className="flex gap-2 mt-1">
+                      <span className="text-[7px] font-bold" style={{ color: '#4f46e5' }}>{fixPct.toFixed(0)}% fijos</span>
+                      <span className="text-[7px] font-bold" style={{ color: '#f97316' }}>{varPct.toFixed(0)}% var.</span>
+                    </div>
+                  </div>
+                  <div className="col-span-2 text-right">
+                    <p className="font-mono font-bold text-xs text-slate-800">{fmt(t.total)}</p>
+                    <p className="text-[8px] text-slate-400 font-medium">{fmt(t.costoPorKm)}/km</p>
+                  </div>
+                  <div className="col-span-2 text-right">
+                    <span className="inline-block px-2 py-0.5 rounded-lg text-[9px] font-bold"
+                      style={{ background: 'rgba(99,102,241,0.1)', color: '#4f46e5' }}>
+                      {pct.toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Footer totales */}
+          <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-3 gap-4">
+            {[
+              { label: 'Total flota', value: fmt(stats.grandTotal), color: '#4f46e5' },
+              { label: 'Mayor egreso', value: fmt(stats.ranking[0]?.total || 0), color: '#f97316' },
+              { label: 'Menor egreso', value: fmt(stats.ranking[stats.ranking.length-1]?.total || 0), color: '#16a34a' },
+            ].map(item => (
+              <div key={item.label} className="text-center">
+                <p className="text-[8px] font-bold uppercase tracking-wider text-slate-400">{item.label}</p>
+                <p className="font-mono font-bold text-sm mt-0.5" style={{ color: item.color }}>{item.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+// ─── KPI CARD ─────────────────────────────────────────────────────────────────
+function KpiCard({ label, value, Icon, accent, accentBg, accentBorder, suffix, mono }) {
+  return (
+    <div className="stat-card bg-white p-5 rounded-2xl flex flex-col justify-between" style={{ minHeight: 130 }}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="p-2 rounded-xl" style={{ background: accentBg, border: `1px solid ${accentBorder}` }}>
+          <Icon size={13} style={{ color: accent }} />
+        </div>
+        {suffix && <span className="text-[7px] font-bold uppercase tracking-widest text-slate-300">{suffix}</span>}
+      </div>
+      <div>
+        <p className="text-[8px] font-bold uppercase tracking-widest text-slate-400 mb-1">{label}</p>
+        <p className={`font-extrabold text-xl tracking-tight text-slate-900 ${mono ? 'font-mono' : 'font-display'}`}>{value}</p>
       </div>
     </div>
   );
