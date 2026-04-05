@@ -45,42 +45,42 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'veracruz-fleet-pro-v
 const ROLES = { ADMIN: 'admin', USER: 'user', DRIVER: 'driver' };
 const TODAY = new Date();
 
-const FUEL_TYPES   = ['diesel','nafta','gnc'] as const;
-const TRUCK_STATUS = ['disponible','en_viaje','en_taller','inactivo'] as const;
+const FUEL_TYPES   = ['diesel','nafta','gnc'];
+const TRUCK_STATUS = ['disponible','en_viaje','en_taller','inactivo'];
 
 const ALERT_THRESHOLDS = {
   DOCS_WARNING_DAYS:   15,
   SERVICE_WARNING_KM:  1000,
   SERVICE_CRITICAL_KM: 500,
   EFFICIENCY_DROP_PCT: 15,
-} as const;
+};
 
-const EFFICIENCY_THRESHOLDS = { OPTIMO: 4, REGULAR: 3 } as const;
+const EFFICIENCY_THRESHOLDS = { OPTIMO: 4, REGULAR: 3 };
 
-const STATUS_META: Record<string,{label:string;color:string;bg:string;border:string}> = {
+const STATUS_META = {
   disponible: { label:'Disponible', color:'var(--success)', bg:'#f0fdf4', border:'#bbf7d0' },
   en_viaje:   { label:'En Viaje',   color:'var(--accent)',  bg:'#eff6ff', border:'#bfdbfe' },
-  en_taller:  { label:'En Taller',  color:'var(--warn)',    bg:'#fffbeb', border:'#fde68a' },
+  en_taller:  { label:'En Taller',  color:'var(--warn)',     bg:'#fffbeb', border:'#fde68a' },
   inactivo:   { label:'Inactivo',   color:'var(--oxford)',  bg:'var(--ice)', border:'var(--mist)' },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function daysUntil(dateStr: string, today: Date = TODAY): number {
+function daysUntil(dateStr, today = TODAY) {
   if (!dateStr) return Infinity;
   const target = new Date(dateStr + 'T00:00:00');
   const base   = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  return Math.floor((target.getTime() - base.getTime()) / 86_400_000);
+  return Math.floor((target.getTime() - base.getTime()) / 86400000);
 }
 
-function isFuel(label: string) { return (label || '').toLowerCase().startsWith('combustible'); }
+function isFuel(label) { return (label || '').toLowerCase().startsWith('combustible'); }
 
-function calcRendimiento(prevKm: number, currKm: number, litros: number): number | null {
+function calcRendimiento(prevKm, currKm, litros) {
   if (currKm <= prevKm || litros <= 0) return null;
   return (currKm - prevKm) / litros;
 }
 
-function classifyRend(v: number): 'optimo'|'regular'|'deficiente' {
+function classifyRend(v) {
   if (v >= EFFICIENCY_THRESHOLDS.OPTIMO)  return 'optimo';
   if (v >= EFFICIENCY_THRESHOLDS.REGULAR) return 'regular';
   return 'deficiente';
@@ -88,8 +88,8 @@ function classifyRend(v: number): 'optimo'|'regular'|'deficiente' {
 
 // ─── Alert engine (pure) ──────────────────────────────────────────────────────
 
-function generateAlerts(trucks: any[], history: any[]): any[] {
-  const alerts: any[] = [];
+function generateAlerts(trucks, history) {
+  const alerts = [];
 
   for (const truck of trucks) {
     const base = { truckId: truck.id, patente: truck.patente, chofer: truck.chofer };
@@ -100,16 +100,16 @@ function generateAlerts(trucks: any[], history: any[]): any[] {
       if (d < 0)
         alerts.push({ ...base, key:`${truck.id}-seg-v`, type:'seguro_vencido',   severity:'critical', message:`Seguro VENCIDO hace ${Math.abs(d)} día${Math.abs(d)!==1?'s':''}`, daysRemaining:d, rawValue:truck.seguro_venc });
       else if (d <= ALERT_THRESHOLDS.DOCS_WARNING_DAYS)
-        alerts.push({ ...base, key:`${truck.id}-seg-p`, type:'seguro_proximo',   severity:'warning',  message:`Seguro vence en ${d} día${d!==1?'s':''}`,                          daysRemaining:d, rawValue:truck.seguro_venc });
+        alerts.push({ ...base, key:`${truck.id}-seg-p`, type:'seguro_proximo',   severity:'warning',  message:`Seguro vence en ${d} día${d!==1?'s':''}`,                       daysRemaining:d, rawValue:truck.seguro_venc });
     }
 
     // 2. VTV
     if (truck.vtv_venc) {
       const d = daysUntil(truck.vtv_venc);
       if (d < 0)
-        alerts.push({ ...base, key:`${truck.id}-vtv-v`, type:'vtv_vencido',      severity:'critical', message:`VTV VENCIDA hace ${Math.abs(d)} día${Math.abs(d)!==1?'s':''}`,     daysRemaining:d, rawValue:truck.vtv_venc });
+        alerts.push({ ...base, key:`${truck.id}-vtv-v`, type:'vtv_vencido',       severity:'critical', message:`VTV VENCIDA hace ${Math.abs(d)} día${Math.abs(d)!==1?'s':''}`,     daysRemaining:d, rawValue:truck.vtv_venc });
       else if (d <= ALERT_THRESHOLDS.DOCS_WARNING_DAYS)
-        alerts.push({ ...base, key:`${truck.id}-vtv-p`, type:'vtv_proximo',      severity:'warning',  message:`VTV vence en ${d} día${d!==1?'s':''}`,                             daysRemaining:d, rawValue:truck.vtv_venc });
+        alerts.push({ ...base, key:`${truck.id}-vtv-p`, type:'vtv_proximo',       severity:'warning',  message:`VTV vence en ${d} día${d!==1?'s':''}`,                               daysRemaining:d, rawValue:truck.vtv_venc });
     }
 
     // 3. Service preventivo por KM
@@ -136,7 +136,7 @@ function generateAlerts(trucks: any[], history: any[]): any[] {
     }
   }
 
-  const order: Record<string,number> = { critical:0, warning:1, info:2 };
+  const order = { critical:0, warning:1, info:2 };
   return alerts.sort((a,b) => order[a.severity] - order[b.severity]);
 }
 
@@ -147,20 +147,20 @@ const globalStyles = `
 
   :root {
     --navy:       #0b1120;
-    --navy-2:     #111827;
-    --navy-3:     #1a2640;
-    --steel:      #2d3f5c;
-    --steel-2:    #3d5275;
-    --oxford:     #8496b0;
-    --mist:       #c8d4e3;
-    --ice:        #eef2f7;
-    --white:      #ffffff;
-    --accent:     #2563eb;
-    --accent-lt:  #3b82f6;
-    --danger:     #dc2626;
-    --warn:       #d97706;
-    --success:    #16a34a;
-    --fuel:       #0ea5e9;
+    --navy-2:      #111827;
+    --navy-3:      #1a2640;
+    --steel:       #2d3f5c;
+    --steel-2:     #3d5275;
+    --oxford:      #8496b0;
+    --mist:        #c8d4e3;
+    --ice:         #eef2f7;
+    --white:       #ffffff;
+    --accent:      #2563eb;
+    --accent-lt:   #3b82f6;
+    --danger:      #dc2626;
+    --warn:        #d97706;
+    --success:     #16a34a;
+    --fuel:        #0ea5e9;
   }
 
   * { font-family: 'DM Sans', sans-serif; box-sizing: border-box; }
@@ -292,31 +292,31 @@ const globalStyles = `
 // ─── APP ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [user, setUser]           = useState<any>(null);
-  const [userRole, setUserRole]   = useState<string|null>(null);
+  const [user, setUser]           = useState(null);
+  const [userRole, setUserRole]   = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [showLogin, setShowLogin] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [trucks, setTrucks]       = useState<any[]>([]);
-  const [history, setHistory]     = useState<any[]>([]);
-  const [users, setUsers]         = useState<any[]>([]);
-  const [clientes, setClientes]   = useState<any[]>([]);
-  const [selectedClient, setSelectedClient] = useState<string|null>(null);
+  const [trucks, setTrucks]       = useState([]);
+  const [history, setHistory]     = useState([]);
+  const [users, setUsers]         = useState([]);
+  const [clientes, setClientes]   = useState([]);
+  const [selectedClient, setSelectedClient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [historyTruckFilter, setHistoryTruckFilter] = useState('');
   const [dateRange, setDateRange] = useState({
     start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
     end:   new Date().toISOString().split('T')[0],
   });
-  const [notif, setNotif]   = useState<any>(null);
-  const [dbError, setDbError] = useState<string|null>(null);
+  const [notif, setNotif]   = useState(null);
+  const [dbError, setDbError] = useState(null);
   const [modals, setModals] = useState({
-    expense:false, truck:false, delete:null as any,
+    expense:false, truck:false, delete:null,
     users:false, addUser:false, clientes:false, addCliente:false,
-    editTruck:null as any, editExpense:null as any,
+    editTruck:null, editExpense:null,
   });
 
-  const showNotif = (msg: string, type='success') => { setNotif({msg,type}); setTimeout(()=>setNotif(null),4000); };
+  const showNotif = (msg, type='success') => { setNotif({msg,type}); setTimeout(()=>setNotif(null),4000); };
 
   // Auth
   useEffect(() => {
@@ -393,7 +393,7 @@ export default function App() {
       const costoPorKm   = kmRecorridos>0 ? total/kmRecorridos : 0;
       const desglose = tHist.reduce((acc,h) => {
         const cat=h.categoryLabel||'VARIOS'; acc[cat]=(acc[cat]||0)+(Number(h.amount)||0); return acc;
-      },{} as Record<string,number>);
+      },{});
       return {...t, varTotal, fixTotal, total, kmRecorridos, costoPorKm, desglose};
     }).filter(t =>
       t.patente.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -402,7 +402,7 @@ export default function App() {
 
     const grandTotal = truckStats.reduce((a,t) => a+t.total, 0);
 
-    const monthlyMap: Record<string,any> = {};
+    const monthlyMap = {};
     history.filter(h => h.status!=='baja'&&h.status!=='cancelled').forEach(h => {
       const d   = new Date(h.timestamp);
       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
@@ -427,14 +427,14 @@ export default function App() {
       .filter(h => isFuel(h.categoryLabel) && h.status!=='baja' && (h.litros||0)>0 && (h.km_registro||0)>0)
       .sort((a,b) => a.timestamp - b.timestamp);
 
-    const byTruck: Record<string,any> = {};
+    const byTruck = {};
     fuelLoads.forEach(h => {
       if (!byTruck[h.truckId]) byTruck[h.truckId] = {truckId:h.truckId,patente:h.truck,loads:[]};
       byTruck[h.truckId].loads.push(h);
     });
 
     const truckEfficiency = Object.values(byTruck).map(({truckId,patente,loads}) => {
-      const segments: any[] = [];
+      const segments = [];
       for (let i=1; i<loads.length; i++) {
         const prev = loads[i-1], curr = loads[i];
         const kmDiff = curr.km_registro - prev.km_registro;
@@ -452,10 +452,10 @@ export default function App() {
     });
 
     const valid = truckEfficiency.filter(t => t.avgKmPL!==null);
-    const fleetAvgKmL = valid.length>0 ? valid.reduce((a,t)=>a+t.avgKmPL!,0)/valid.length : 0;
+    const fleetAvgKmL = valid.length>0 ? valid.reduce((a,t)=>a+t.avgKmPL,0)/valid.length : 0;
     const totalFuelCost = history.filter(h=>isFuel(h.categoryLabel)&&h.status!=='baja').reduce((a,h)=>a+Number(h.amount),0);
     const totalKmFleet  = truckEfficiency.reduce((a,t)=>a+t.totalKm,0);
-    const costPerKm     = totalKmFleet>0 ? totalFuelCost/totalKmFleet : 0;
+    const costPerKm      = totalKmFleet>0 ? totalFuelCost/totalKmFleet : 0;
     const desvioAlerts  = truckEfficiency.filter(t => t.desvio!==null && t.desvio<-ALERT_THRESHOLDS.EFFICIENCY_DROP_PCT);
     const priceEvolution = fuelLoads.filter(h=>h.precio_por_litro>0).slice(-12)
       .map(h => ({fecha:h.date?.split(',')[0]||'',precio:Number(h.precio_por_litro)||0,patente:h.truck}));
@@ -465,7 +465,7 @@ export default function App() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────────
 
-  const handleAddTruck = async (data: any) => {
+  const handleAddTruck = async (data) => {
     try {
       await addDoc(collection(db,'artifacts',appId,'public','data','trucks'), {
         ...data, historialService:[], timestamp:Date.now(),
@@ -474,7 +474,7 @@ export default function App() {
     } catch { showNotif("Error al guardar","error"); }
   };
 
-  const handleEditTruck = async (data: any, truckId: string) => {
+  const handleEditTruck = async (data, truckId) => {
     try {
       await updateDoc(doc(db,'artifacts',appId,'public','data','trucks',truckId), {
         ...data, editadoPor:user.email, editadoAt:Date.now(),
@@ -483,18 +483,18 @@ export default function App() {
     } catch { showNotif("Error al actualizar","error"); }
   };
 
-  const handleAddExpense = async (e: React.FormEvent<HTMLFormElement>, extra: any={}) => {
+  const handleAddExpense = async (e, extra = {}) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const truckId  = fd.get('truckId') as string;
+    const truckId  = fd.get('truckId');
     const truck    = trucks.find(t => t.id===truckId);
-    const amount   = parseFloat(fd.get('amount') as string);
+    const amount   = parseFloat(fd.get('amount'));
     const category = extra.category || 'varios';
     const label    = category==='varios'&&extra.variosDesc
       ? `VARIOS - ${extra.variosDesc.toUpperCase()}`
       : category.toUpperCase();
-    const litros      = parseFloat(fd.get('litros') as string)||0;
-    const km_registro = parseFloat(fd.get('km_registro') as string)||0;
+    const litros      = parseFloat(fd.get('litros'))||0;
+    const km_registro = parseFloat(fd.get('km_registro'))||0;
     const precio_por_litro = litros>0 ? amount/litros : 0;
     try {
       await addDoc(collection(db,'artifacts',appId,'public','data','history'), {
@@ -509,7 +509,7 @@ export default function App() {
     } catch { showNotif("Error al registrar","error"); }
   };
 
-  const handleEditExpense = async (item: any, newAmount: string, motivo: string) => {
+  const handleEditExpense = async (item, newAmount, motivo) => {
     if (!newAmount||isNaN(Number(newAmount))) return showNotif("Monto inválido","error");
     const edicion = {montoAnterior:item.amount,montoNuevo:parseFloat(newAmount),editadoPor:user.email,editadoAt:Date.now(),fecha:new Date().toLocaleString('es-AR'),motivo:motivo||''};
     try {
@@ -522,7 +522,7 @@ export default function App() {
     } catch { showNotif("Error al editar","error"); }
   };
 
-  const handleBajaExpense = async (item: any) => {
+  const handleBajaExpense = async (item) => {
     try {
       await updateDoc(doc(db,'artifacts',appId,'public','data','history',item.id),{status:'baja',bajaBy:user.email,bajaAt:Date.now()});
       showNotif("Registro dado de baja");
@@ -537,30 +537,30 @@ export default function App() {
     } catch { showNotif("Error al eliminar","error"); }
   };
 
-  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    try { await signInWithEmailAndPassword(auth, fd.get('email') as string, fd.get('password') as string); showNotif("¡Bienvenido!"); }
-    catch(err:any) { showNotif(err.message||"Credenciales incorrectas","error"); }
+    try { await signInWithEmailAndPassword(auth, fd.get('email'), fd.get('password')); showNotif("¡Bienvenido!"); }
+    catch(err) { showNotif(err.message||"Credenciales incorrectas","error"); }
   };
 
-  const handleCreateUser = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleCreateUser = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     try {
-      const uc = await createUserWithEmailAndPassword(auth, fd.get('email') as string, fd.get('password') as string);
+      const uc = await createUserWithEmailAndPassword(auth, fd.get('email'), fd.get('password'));
       await addDoc(collection(db,'artifacts',appId,'public','data','users'),{uid:uc.user.uid,email:fd.get('email'),role:fd.get('role'),createdAt:Date.now(),createdBy:user.email});
-      showNotif("Usuario creado"); setModals(p => ({...p,addUser:false})); (e.currentTarget as HTMLFormElement).reset();
-    } catch(err:any) { showNotif(err.message||"Error","error"); }
+      showNotif("Usuario creado"); setModals(p => ({...p,addUser:false})); (e.currentTarget).reset();
+    } catch(err) { showNotif(err.message||"Error","error"); }
   };
 
-  const handleCreateCliente = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleCreateCliente = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     try {
       const ref = await addDoc(collection(db,'artifacts',appId,'public','data','clientes'),{nombre:fd.get('nombre'),email:fd.get('email'),telefono:fd.get('telefono'),createdAt:Date.now(),createdBy:user.email,estado:'activo'});
-      setSelectedClient(ref.id); showNotif("Cliente creado"); setModals(p => ({...p,addCliente:false})); (e.currentTarget as HTMLFormElement).reset();
-    } catch(err:any) { showNotif(err.message||"Error","error"); }
+      setSelectedClient(ref.id); showNotif("Cliente creado"); setModals(p => ({...p,addCliente:false})); (e.currentTarget).reset();
+    } catch(err) { showNotif(err.message||"Error","error"); }
   };
 
   const handleExportExcel = async () => {
@@ -586,10 +586,10 @@ export default function App() {
     } catch { showNotif("Error en respaldo","error"); }
   };
 
-  const fmt  = (val: number) => new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(val||0);
-  const fmtN = (val: number, dec=2) => Number(val||0).toFixed(dec);
+  const fmt  = (val) => new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(val||0);
+  const fmtN = (val, dec=2) => Number(val||0).toFixed(dec);
 
-  // ── Guards ────────────────────────────────────────────────────────────────────
+  // ─── Guards ────────────────────────────────────────────────────────────────────
   if (authLoading) return (<><style>{globalStyles}</style><LoadingScreen /></>);
   if (showLogin)   return (<><style>{globalStyles}</style><LoginComponent onLogin={handleLogin} /></>);
 
@@ -704,12 +704,11 @@ export default function App() {
             </div>
           </div>
 
-          {/* Alert Panel — replaces the old alert strip */}
+          {/* Alert Panel */}
           <AlertPanel alerts={fleetAlerts} />
 
-          {/* TABS */}
-          {activeTab==='dashboard'  && <DashboardPanel  stats={stats}  trucks={trucks} fmt={fmt} />}
-          {activeTab==='units'      && <FlotaPanel      stats={stats}  setModals={setModals} />}
+          {activeTab==='dashboard'   && <DashboardPanel  stats={stats}  trucks={trucks} fmt={fmt} />}
+          {activeTab==='units'       && <FlotaPanel      stats={stats}  setModals={setModals} />}
           {activeTab==='history'    && <HistoryTable    allPeriod={stats.allPeriod} trucks={trucks} truckFilter={historyTruckFilter} onTruckFilter={setHistoryTruckFilter} onBaja={handleBajaExpense} onEdit={item => setModals(m => ({...m,editExpense:item}))} fmt={fmt} onExport={handleExportExcel} />}
           {activeTab==='efficiency' && <EfficiencyPanel effStats={efficiencyStats} trucks={trucks} fmt={fmt} fmtN={fmtN} />}
         </main>
@@ -728,7 +727,7 @@ export default function App() {
 
         {modals.delete && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 overlay">
-            <div className="modal bg-white p-8 w-full max-w-sm text-center" style={{borderBottom:'4px solid var(--danger)'}}>
+            <div className="modal bg-white p-8 w-full max-sm text-center" style={{borderBottom:'4px solid var(--danger)'}}>
               <AlertTriangle size={28} className="mx-auto mb-4" style={{color:'var(--danger)'}} />
               <h3 className="font-display font-black uppercase text-xl mb-1" style={{color:'var(--navy)'}}>¿Eliminar Unidad?</h3>
               <p className="text-sm mb-6" style={{color:'var(--oxford)'}}>Camión <span className="font-bold" style={{color:'var(--navy)'}}>{modals.delete.patente}</span></p>
@@ -824,7 +823,7 @@ export default function App() {
 
 // ─── ALERT PANEL ──────────────────────────────────────────────────────────────
 
-function AlertPanel({ alerts }: { alerts: any[] }) {
+function AlertPanel({ alerts }) {
   if (alerts.length === 0) {
     return (
       <div className="rounded-2xl border p-4 flex items-center gap-3" style={{background:'#f0fdf4',borderColor:'#bbf7d0'}}>
@@ -840,15 +839,14 @@ function AlertPanel({ alerts }: { alerts: any[] }) {
   }
 
   const criticals = alerts.filter(a => a.severity==='critical');
-  const warnings  = alerts.filter(a => a.severity==='warning');
 
-  const ALERT_ICON: Record<string, React.ElementType> = {
+  const ALERT_ICON = {
     seguro_vencido: ShieldAlert, seguro_proximo: ShieldAlert,
     vtv_vencido: AlertTriangle, vtv_proximo: AlertTriangle,
     service_proximo: Wrench, service_vencido: Wrench,
     rendimiento_bajo: Fuel,
   };
-  const ALERT_CAT: Record<string,string> = {
+  const ALERT_CAT = {
     seguro_vencido:'Seguro', seguro_proximo:'Seguro',
     vtv_vencido:'VTV', vtv_proximo:'VTV',
     service_proximo:'Service', service_vencido:'Service',
@@ -919,10 +917,10 @@ function AlertPanel({ alerts }: { alerts: any[] }) {
 
 // ─── DASHBOARD PANEL ──────────────────────────────────────────────────────────
 
-function DashboardPanel({stats,trucks,fmt}: any) {
-  const combustiblePct   = stats.grandTotal>0?((stats.pieData.find((d:any)=>d.name==='Combustible')?.value||0)/stats.grandTotal*100).toFixed(1):0;
-  const mantenimientoPct = stats.grandTotal>0?((stats.pieData.find((d:any)=>d.name==='Mantenimiento')?.value||0)/stats.grandTotal*100).toFixed(1):0;
-  const fixTotal         = stats.truckStats.reduce((a:number,t:any)=>a+t.fixTotal,0);
+function DashboardPanel({stats,trucks,fmt}) {
+  const combustiblePct   = stats.grandTotal>0?((stats.pieData.find((d)=>d.name==='Combustible')?.value||0)/stats.grandTotal*100).toFixed(1):0;
+  const mantenimientoPct = stats.grandTotal>0?((stats.pieData.find((d)=>d.name==='Mantenimiento')?.value||0)/stats.grandTotal*100).toFixed(1):0;
+  const fixTotal         = stats.truckStats.reduce((a,t)=>a+t.fixTotal,0);
 
   return (
     <div className="space-y-5">
@@ -937,15 +935,15 @@ function DashboardPanel({stats,trucks,fmt}: any) {
             <p className="font-data text-3xl text-white leading-none">{fmt(stats.grandTotal)}</p>
           </div>
         </div>
-        <SubKpi label="Unidades Activas"    value={trucks.length}  Icon={Truck}      accent="#2563eb" bg="#eff6ff" border="#bfdbfe" suffix="activas" />
-        <SubKpi label="Operaciones"         value={stats.totalExpenses} Icon={RotateCcw} accent="#d97706" bg="#fffbeb" border="#fde68a" suffix="registros" />
+        <SubKpi label="Unidades Activas"     value={trucks.length}  Icon={Truck}      accent="#2563eb" bg="#eff6ff" border="#bfdbfe" suffix="activas" />
+        <SubKpi label="Operaciones"          value={stats.totalExpenses} Icon={RotateCcw} accent="#d97706" bg="#fffbeb" border="#fde68a" suffix="registros" />
         <SubKpi label="Promedio por Unidad" value={fmt(stats.grandTotal/(trucks.length||1))} Icon={TrendingUp} accent="#7c3aed" bg="#f5f3ff" border="#ddd6fe" mono />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          {label:'Combustible',   emoji:'⛽', pct:combustiblePct,   val:stats.pieData.find((d:any)=>d.name==='Combustible')?.value||0,   color:'#0ea5e9', bg:'#f0f9ff', border:'#bae6fd', barColor:'linear-gradient(90deg,#38bdf8,#0ea5e9)'},
-          {label:'Mantenimiento', emoji:'🔧', pct:mantenimientoPct, val:stats.pieData.find((d:any)=>d.name==='Mantenimiento')?.value||0, color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe', barColor:'linear-gradient(90deg,#60a5fa,#2563eb)'},
+          {label:'Combustible',   emoji:'⛽', pct:combustiblePct,   val:stats.pieData.find((d)=>d.name==='Combustible')?.value||0,   color:'#0ea5e9', bg:'#f0f9ff', border:'#bae6fd', barColor:'linear-gradient(90deg,#38bdf8,#0ea5e9)'},
+          {label:'Mantenimiento', emoji:'🔧', pct:mantenimientoPct, val:stats.pieData.find((d)=>d.name==='Mantenimiento')?.value||0, color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe', barColor:'linear-gradient(90deg,#60a5fa,#2563eb)'},
           {label:'Costos Fijos',  emoji:'🛡', pct:stats.grandTotal>0?(fixTotal/stats.grandTotal*100).toFixed(1):0, val:fixTotal,         color:'#16a34a', bg:'#f0fdf4', border:'#bbf7d0', barColor:'linear-gradient(90deg,#4ade80,#16a34a)'},
         ].map(item => (
           <div key={item.label} className="rounded-2xl p-5 border" style={{background:item.bg,borderColor:item.border}}>
@@ -982,7 +980,7 @@ function DashboardPanel({stats,trucks,fmt}: any) {
               <BarChart data={stats.truckStats} barSize={32}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="patente" axisLine={false} tickLine={false} tick={{fontSize:10,fontWeight:'700',fill:'#64748b',fontFamily:'Barlow Condensed'}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} tickFormatter={(v:number) => `$${(v/1000).toFixed(0)}k`} />
+                <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
                 <Tooltip content={<BarTooltip fmt={fmt}/>} />
                 <Bar dataKey="fixTotal" stackId="a" fill="#2563eb" name="Fijos" />
                 <Bar dataKey="varTotal" stackId="a" fill="#f97316" radius={[5,5,0,0]} name="Variables" />
@@ -1002,13 +1000,13 @@ function DashboardPanel({stats,trucks,fmt}: any) {
                   <Pie data={stats.pieData} innerRadius={50} outerRadius={68} paddingAngle={4} dataKey="value" strokeWidth={0}>
                     <Cell fill="#f97316"/><Cell fill="#2563eb"/>
                   </Pie>
-                  <Tooltip formatter={(v:number) => fmt(v)} />
+                  <Tooltip formatter={(v) => fmt(v)} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
           </div>
           <div className="space-y-2">
-            {[{label:'Combustible',val:stats.pieData.find((d:any)=>d.name==='Combustible')?.value||0,color:'#f97316',bg:'#fff7ed'},{label:'Mantenimiento',val:stats.pieData.find((d:any)=>d.name==='Mantenimiento')?.value||0,color:'#2563eb',bg:'#eff6ff'}].map(item => (
+            {[{label:'Combustible',val:stats.pieData.find((d)=>d.name==='Combustible')?.value||0,color:'#f97316',bg:'#fff7ed'},{label:'Mantenimiento',val:stats.pieData.find((d)=>d.name==='Mantenimiento')?.value||0,color:'#2563eb',bg:'#eff6ff'}].map(item => (
               <div key={item.label} className="flex items-center justify-between rounded-xl px-3 py-2" style={{background:item.bg}}>
                 <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{background:item.color}}/><span className="text-[9px] font-bold uppercase" style={{color:item.color}}>{item.label}</span></div>
                 <span className="font-mono text-[10px] font-bold" style={{color:'var(--navy)'}}>{fmt(item.val)}</span>
@@ -1031,8 +1029,8 @@ function DashboardPanel({stats,trucks,fmt}: any) {
               <LineChart data={stats.trendData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
                 <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{fontSize:10,fontWeight:'600',fill:'#94a3b8'}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} tickFormatter={(v:number) => `$${(v/1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{background:'var(--navy)',border:'none',borderRadius:10,color:'white',fontSize:11}} formatter={(v:number) => [fmt(v)]} />
+                <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
+                <Tooltip contentStyle={{background:'var(--navy)',border:'none',borderRadius:10,color:'white',fontSize:11}} formatter={(v) => [fmt(v)]} />
                 <Line type="monotone" dataKey="combustible"   stroke="#f97316" strokeWidth={2.5} dot={{fill:'#f97316',r:4,strokeWidth:2,stroke:'white'}} name="Combustible" />
                 <Line type="monotone" dataKey="mantenimiento" stroke="#2563eb" strokeWidth={2.5} dot={{fill:'#2563eb',r:4,strokeWidth:2,stroke:'white'}} name="Mantenimiento" />
               </LineChart>
@@ -1048,7 +1046,7 @@ function DashboardPanel({stats,trucks,fmt}: any) {
             <p className="text-[10px] mt-0.5" style={{color:'var(--oxford)'}}>Mayor egreso en el período</p>
           </div>
           <div className="space-y-2">
-            {stats.ranking.map((t:any, i:number) => {
+            {stats.ranking.map((t, i) => {
               const pct    = stats.grandTotal>0?(t.total/stats.grandTotal*100):0;
               const fixPct = t.total>0?(t.fixTotal/t.total*100):0;
               const varPct = t.total>0?(t.varTotal/t.total*100):0;
@@ -1090,9 +1088,9 @@ function DashboardPanel({stats,trucks,fmt}: any) {
 
 // ─── EFFICIENCY PANEL ─────────────────────────────────────────────────────────
 
-function EfficiencyPanel({effStats,trucks,fmt,fmtN}: any) {
+function EfficiencyPanel({effStats,trucks,fmt,fmtN}) {
   const {truckEfficiency,fleetAvgKmL,costPerKm,desvioAlerts,priceEvolution} = effStats;
-  const kmLBadge = (kmL: number|null) => {
+  const kmLBadge = (kmL) => {
     if (kmL===null) return <span className="px-2 py-0.5 rounded-lg text-[8px] font-bold" style={{background:'var(--ice)',color:'var(--oxford)'}}>Sin datos</span>;
     if (kmL>=4) return <span className="badge-good px-2 py-0.5 rounded-lg text-[8px] font-bold">{fmtN(kmL,2)} km/l</span>;
     if (kmL>=3) return <span className="badge-warn px-2 py-0.5 rounded-lg text-[8px] font-bold">{fmtN(kmL,2)} km/l</span>;
@@ -1133,7 +1131,7 @@ function EfficiencyPanel({effStats,trucks,fmt,fmtN}: any) {
           </div>
           {desvioAlerts.length===0
             ? <div className="flex items-center gap-2 mt-4"><CheckCircle2 size={20} style={{color:'var(--success)'}}/><p className="text-sm font-semibold" style={{color:'var(--success)'}}>Sin desvíos detectados</p></div>
-            : <div className="space-y-2 mt-2 max-h-24 overflow-y-auto">{desvioAlerts.map((t:any) => (
+            : <div className="space-y-2 mt-2 max-h-24 overflow-y-auto">{desvioAlerts.map((t) => (
                 <div key={t.truckId} className="flex items-center justify-between">
                   <span className="font-display font-bold text-xs uppercase" style={{color:'var(--navy)'}}>{t.patente}</span>
                   <span className="badge-bad px-2 py-0.5 rounded-lg text-[9px] font-bold flex items-center gap-1"><TrendingDown size={9}/>{fmtN(t.desvio,1)}%</span>
@@ -1162,8 +1160,8 @@ function EfficiencyPanel({effStats,trucks,fmt,fmtN}: any) {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
                 <XAxis dataKey="fecha" axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} tickFormatter={(v:number) => `$${(v/1000).toFixed(1)}k`} />
-                <Tooltip contentStyle={{background:'var(--navy)',border:'none',borderRadius:10,color:'white',fontSize:11}} formatter={(v:number) => [`$${Number(v).toLocaleString('es-AR')} /L`,'Precio']} />
+                <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} tickFormatter={(v) => `$${(v/1000).toFixed(1)}k`} />
+                <Tooltip contentStyle={{background:'var(--navy)',border:'none',borderRadius:10,color:'white',fontSize:11}} formatter={(v) => [`$${Number(v).toLocaleString('es-AR')} /L`,'Precio']} />
                 <Area type="monotone" dataKey="precio" stroke="#0ea5e9" strokeWidth={2.5} fill="url(#fuelGrad)" dot={{fill:'#0ea5e9',r:3,strokeWidth:2,stroke:'white'}} name="Precio/L" />
               </AreaChart>
             </ResponsiveContainer>
@@ -1187,8 +1185,8 @@ function EfficiencyPanel({effStats,trucks,fmt,fmtN}: any) {
             </thead>
             <tbody className="divide-y" style={{borderColor:'var(--mist)'}}>
               {truckEfficiency.length===0 && <tr><td colSpan={7} className="px-4 py-10 text-center text-sm" style={{color:'var(--oxford)'}}>Sin datos de combustible con litros registrados</td></tr>}
-              {truckEfficiency.map((t:any) => {
-                const truck = trucks.find((tr:any) => tr.id===t.truckId)||{};
+              {truckEfficiency.map((t) => {
+                const truck = trucks.find((tr) => tr.id===t.truckId)||{};
                 const tend  = t.desvio===null?null:t.desvio>0?'up':t.desvio<-5?'down':'flat';
                 return (
                   <tr key={t.truckId} className="history-row transition-colors">
@@ -1206,7 +1204,7 @@ function EfficiencyPanel({effStats,trucks,fmt,fmtN}: any) {
                     <td className="px-4 py-3">{kmLBadge(t.avgKmPL)}</td>
                     <td className="px-4 py-3"><span className="font-mono text-[9px]" style={{color:'var(--oxford)'}}>{t.lastLoad?.date?.split(',')[0]||'—'}</span></td>
                     <td className="px-4 py-3">
-                      {tend==='up'   && <span className="flex items-center gap-1 text-[9px] font-bold" style={{color:'var(--success)'}}><ArrowUp size={11}/>{fmtN(t.desvio,1)}%</span>}
+                      {tend==='up'    && <span className="flex items-center gap-1 text-[9px] font-bold" style={{color:'var(--success)'}}><ArrowUp size={11}/>{fmtN(t.desvio,1)}%</span>}
                       {tend==='down' && <span className="flex items-center gap-1 text-[9px] font-bold" style={{color:'var(--danger)'}}><ArrowDown size={11}/>{fmtN(Math.abs(t.desvio),1)}%</span>}
                       {tend==='flat' && <span className="flex items-center gap-1 text-[9px]" style={{color:'var(--oxford)'}}><Minus size={11}/>Estable</span>}
                       {tend===null   && <span className="text-[9px]" style={{color:'var(--mist)'}}>—</span>}
@@ -1233,7 +1231,7 @@ function EfficiencyPanel({effStats,trucks,fmt,fmtN}: any) {
 
 // ─── FLOTA PANEL ──────────────────────────────────────────────────────────────
 
-function FlotaPanel({stats, setModals}: any) {
+function FlotaPanel({stats, setModals}) {
   const [statusFilter, setStatusFilter] = useState('');
 
   const STATUS_FILTERS = [
@@ -1245,16 +1243,15 @@ function FlotaPanel({stats, setModals}: any) {
   ];
 
   const filtered = statusFilter
-    ? stats.truckStats.filter((t:any) => t.status===statusFilter)
+    ? stats.truckStats.filter((t) => t.status===statusFilter)
     : stats.truckStats;
 
   return (
     <div className="space-y-4">
-      {/* Status filters */}
       <div className="flex flex-wrap gap-2">
         {STATUS_FILTERS.map(f => {
           const meta = STATUS_META[f.value];
-          const count = f.value ? stats.truckStats.filter((t:any)=>t.status===f.value).length : stats.truckStats.length;
+          const count = f.value ? stats.truckStats.filter((t)=>t.status===f.value).length : stats.truckStats.length;
           return (
             <button key={f.value} onClick={() => setStatusFilter(f.value)}
               className="px-3 py-1.5 rounded-xl font-bold text-[9px] uppercase border-2 transition-all flex items-center gap-1.5"
@@ -1274,16 +1271,14 @@ function FlotaPanel({stats, setModals}: any) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filtered.map((truck:any) => (
+        {filtered.map((truck) => (
           <TruckCard key={truck.id} truck={truck}
-            onDelete={() => setModals((m:any) => ({...m,delete:truck}))}
-            onEdit={()   => setModals((m:any) => ({...m,editTruck:truck}))} />
+            onDelete={() => setModals((m) => ({...m,delete:truck}))}
+            onEdit={()   => setModals((m) => ({...m,editTruck:truck}))} />
         ))}
-        <button onClick={() => setModals((m:any) => ({...m,truck:true}))}
+        <button onClick={() => setModals((m) => ({...m,truck:true}))}
           className="group border-2 border-dashed rounded-[20px] p-8 flex flex-col items-center justify-center gap-3 transition-all min-h-[240px]"
-          style={{borderColor:'var(--mist)'}}
-          onMouseEnter={e => {(e.currentTarget as HTMLElement).style.borderColor='var(--accent)';(e.currentTarget as HTMLElement).style.background='#eff6ff'}}
-          onMouseLeave={e => {(e.currentTarget as HTMLElement).style.borderColor='var(--mist)';(e.currentTarget as HTMLElement).style.background='transparent'}}>
+          style={{borderColor:'var(--mist)'}}>
           <div className="w-12 h-12 rounded-full flex items-center justify-center shadow-inner" style={{background:'var(--ice)'}}>
             <Plus size={22} style={{color:'var(--mist)'}} />
           </div>
@@ -1296,10 +1291,10 @@ function FlotaPanel({stats, setModals}: any) {
 
 // ─── TRUCK CARD ───────────────────────────────────────────────────────────────
 
-function TruckCard({truck, onDelete, onEdit}: any) {
+function TruckCard({truck, onDelete, onEdit}) {
   const [showVar, setShowVar] = useState(false);
-  const fmt = (v:number) => new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
-  const desgloseEntries = Object.entries(truck.desglose||{}).sort((a:any,b:any) => b[1]-a[1]) as [string,number][];
+  const fmt = (v) => new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
+  const desgloseEntries = Object.entries(truck.desglose||{}).sort((a,b) => b[1]-a[1]);
   const statusMeta = STATUS_META[truck.status] || STATUS_META.disponible;
 
   return (
@@ -1323,7 +1318,6 @@ function TruckCard({truck, onDelete, onEdit}: any) {
         </div>
       </div>
 
-      {/* Status badge */}
       <div className="mb-3">
         <span className="inline-flex items-center px-2.5 py-1 rounded-xl text-[8px] font-black uppercase border"
           style={{background:statusMeta.bg,borderColor:statusMeta.border,color:statusMeta.color}}>
@@ -1397,23 +1391,23 @@ function TruckCard({truck, onDelete, onEdit}: any) {
   );
 }
 
-// ─── ALTA UNIDAD MODAL (replaces TruckFormModal) ──────────────────────────────
+// ─── ALTA UNIDAD MODAL ──────────────────────────────
 
-function AltaUnidadModal({initial={} as any, onSubmit, onClose}: any) {
+function AltaUnidadModal({initial={}, onSubmit, onClose}) {
   const isEdit = Boolean(initial.id);
   const [saving,    setSaving]    = useState(false);
-  const [errors,    setErrors]    = useState<Record<string,string>>({});
+  const [errors,    setErrors]    = useState({});
   const [tipoFuel,  setTipoFuel]  = useState(initial.tipoFuel||'diesel');
   const [status,    setStatus]    = useState(initial.status||'disponible');
-  const [seguroAdj, setSeguroAdj] = useState<{file:File|null;url:string;progress:number}>({file:null,url:'',progress:0});
-  const [vtvAdj,    setVtvAdj]    = useState<{file:File|null;url:string;progress:number}>({file:null,url:'',progress:0});
-  const seguroRef = useRef<HTMLInputElement>(null);
-  const vtvRef    = useRef<HTMLInputElement>(null);
+  const [seguroAdj, setSeguroAdj] = useState({file:null,url:'',progress:0});
+  const [vtvAdj,    setVtvAdj]    = useState({file:null,url:'',progress:0});
+  const seguroRef = useRef(null);
+  const vtvRef    = useRef(null);
 
   const CURRENT_YEAR = new Date().getFullYear();
 
-  const validate = (f: Record<string,any>) => {
-    const e: Record<string,string> = {};
+  const validate = (f) => {
+    const e = {};
     if (!f.patente) e.patente='Requerido';
     else if (!/^[A-Z]{2}\d{3}[A-Z]{2}$|^[A-Z]{3}\d{3}$/.test(String(f.patente).toUpperCase())) e.patente='Formato inválido (AA123BB o ABC123)';
     if (!f.marca)  e.marca='Requerido';
@@ -1425,12 +1419,12 @@ function AltaUnidadModal({initial={} as any, onSubmit, onClose}: any) {
     return e;
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const fields = {
       patente:         String(fd.get('patente')||'').toUpperCase().trim(),
-      marca:           String(fd.get('marca')||'').trim(),
+      marca:            String(fd.get('marca')||'').trim(),
       modelo:          String(fd.get('modelo')||'').trim(),
       anio:            Number(fd.get('anio')),
       capacidadTanque: Number(fd.get('capacidadTanque')),
@@ -1448,7 +1442,6 @@ function AltaUnidadModal({initial={} as any, onSubmit, onClose}: any) {
         tipoFuel, status,
         kmInicio: isEdit?(initial.kmInicio||0):fields.kmActual,
         habMunicipal: Number(fd.get('habMunicipal'))||0,
-        // Keep flat legacy fields for backward compat
         seguro:      Number(fd.get('seguroMonto'))||0,
         vtv_costo:   Number(fd.get('vtvMonto'))||0,
         muni_costo:  Number(fd.get('habMunicipal'))||0,
@@ -1460,11 +1453,11 @@ function AltaUnidadModal({initial={} as any, onSubmit, onClose}: any) {
     } finally { setSaving(false); }
   };
 
-  const FieldErr = ({msg}: {msg?:string}) => msg
+  const FieldErr = ({msg}) => msg
     ? <p className="text-[8px] mt-0.5 font-semibold flex items-center gap-1" style={{color:'var(--danger)'}}><AlertCircle size={9}/>{msg}</p>
     : null;
 
-  const SectionHead = ({Icon, title, accent='var(--navy)'}: any) => (
+  const SectionHead = ({Icon, title, accent='var(--navy)'}) => (
     <div className="flex items-center gap-2 pt-4 pb-1 border-t" style={{borderColor:'var(--mist)'}}>
       <div className="p-1.5 rounded-lg" style={{background:`${accent}18`}}><Icon size={13} style={{color:accent}}/></div>
       <p className="text-[8px] font-bold uppercase tracking-widest" style={{color:accent}}>{title}</p>
@@ -1594,9 +1587,9 @@ function AltaUnidadModal({initial={} as any, onSubmit, onClose}: any) {
           <SectionHead Icon={Wrench} title="Costos Fijos" accent="var(--success)" />
 
           <div className="grid grid-cols-3 gap-3">
-            {[{name:'seguroMonto',label:'Seguro ($/mes)',  val:initial.seguro||initial.seguro?.montoCosto},
-              {name:'vtvMonto',   label:'VTV ($/mes)',     val:initial.vtv_costo||initial.vtv?.montoCosto},
-              {name:'habMunicipal',label:'Hab. Mun. ($/mes)', val:initial.muni_costo||initial.habMunicipal}
+            {[{name:'seguroMonto',label:'Seguro ($/mes)',  val:initial.seguro},
+              {name:'vtvMonto',   label:'VTV ($/mes)',      val:initial.vtv_costo},
+              {name:'habMunicipal',label:'Hab. Mun. ($/mes)', val:initial.muni_costo}
             ].map(f => (
               <div key={f.name}>
                 <label className="text-[8px] font-bold uppercase block mb-1" style={{color:'var(--oxford)'}}>{f.label}</label>
@@ -1613,14 +1606,14 @@ function AltaUnidadModal({initial={} as any, onSubmit, onClose}: any) {
                 <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Número de Póliza</label>
                 <div className="relative">
                   <Hash size={11} className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:'var(--oxford)'}} />
-                  <input name="seguroPoliza" placeholder="Nº póliza" defaultValue={initial.seguro_poliza||initial.seguro?.numeroPoliza||''} className="inp w-full pl-8 p-3 text-sm" />
+                  <input name="seguroPoliza" placeholder="Nº póliza" defaultValue={initial.seguro_poliza||''} className="inp w-full pl-8 p-3 text-sm" />
                 </div>
               </div>
               <div>
                 <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Vencimiento</label>
                 <div className="relative">
                   <Calendar size={11} className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:'var(--oxford)'}} />
-                  <input name="seguroVenc" type="date" defaultValue={initial.seguro_venc||initial.seguro?.vencimiento||''} className="inp w-full pl-8 p-3 text-sm" />
+                  <input name="seguroVenc" type="date" defaultValue={initial.seguro_venc||''} className="inp w-full pl-8 p-3 text-sm" />
                 </div>
               </div>
             </div>
@@ -1652,14 +1645,14 @@ function AltaUnidadModal({initial={} as any, onSubmit, onClose}: any) {
                 <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Número de Certificado</label>
                 <div className="relative">
                   <Hash size={11} className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:'var(--oxford)'}} />
-                  <input name="vtvPoliza" placeholder="Nº certificado" defaultValue={initial.vtv_poliza||initial.vtv?.numeroPoliza||''} className="inp w-full pl-8 p-3 text-sm" />
+                  <input name="vtvPoliza" placeholder="Nº certificado" defaultValue={initial.vtv_poliza||''} className="inp w-full pl-8 p-3 text-sm" />
                 </div>
               </div>
               <div>
                 <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Vencimiento</label>
                 <div className="relative">
                   <Calendar size={11} className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:'var(--oxford)'}} />
-                  <input name="vtvVenc" type="date" defaultValue={initial.vtv_venc||initial.vtv?.vencimiento||''} className="inp w-full pl-8 p-3 text-sm" />
+                  <input name="vtvVenc" type="date" defaultValue={initial.vtv_venc||''} className="inp w-full pl-8 p-3 text-sm" />
                 </div>
               </div>
             </div>
@@ -1704,24 +1697,24 @@ function AltaUnidadModal({initial={} as any, onSubmit, onClose}: any) {
 
 // ─── EXPENSE MODAL ────────────────────────────────────────────────────────────
 
-function ExpenseModal({trucks, onSubmit, onClose, history}: any) {
+function ExpenseModal({trucks, onSubmit, onClose, history}) {
   const [tipoGasto,  setTipoGasto]  = useState('');
   const [mantOpen,   setMantOpen]   = useState(false);
   const [subCat,     setSubCat]     = useState('');
   const [variosDesc, setVariosDesc] = useState('');
   const [selectedTruck, setSelectedTruck] = useState('');
   const [kmError,    setKmError]    = useState('');
-  const [ticketFile, setTicketFile] = useState<File|null>(null);
+  const [ticketFile, setTicketFile] = useState(null);
 
   const lastKm = useMemo(() => {
     if (!selectedTruck) return 0;
     const loads = history
-      .filter((h:any) => h.truckId===selectedTruck && isFuel(h.categoryLabel) && (h.km_registro||0)>0 && h.status!=='baja')
-      .sort((a:any,b:any) => b.timestamp-a.timestamp);
-    return loads[0]?.km_registro || trucks.find((t:any)=>t.id===selectedTruck)?.kmActual || 0;
+      .filter((h) => h.truckId===selectedTruck && isFuel(h.categoryLabel) && (h.km_registro||0)>0 && h.status!=='baja')
+      .sort((a,b) => b.timestamp-a.timestamp);
+    return loads[0]?.km_registro || trucks.find((t)=>t.id===selectedTruck)?.kmActual || 0;
   }, [selectedTruck, history, trucks]);
 
-  const validateKm = (val: string) => {
+  const validateKm = (val) => {
     if (!val) { setKmError(''); return; }
     if (parseFloat(val)<=lastKm) setKmError(`KM debe ser mayor al último registrado (${lastKm.toLocaleString('es-AR')} km)`);
     else setKmError('');
@@ -1737,7 +1730,7 @@ function ExpenseModal({trucks, onSubmit, onClose, history}: any) {
     {value:'varios',label:'📦 Varios'},
   ];
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     onSubmit(e,{category:tipoGasto==='combustible'?'combustible':subCat,variosDesc:subCat==='varios'?variosDesc:'',fotoTicket:ticketFile});
   };
@@ -1752,7 +1745,7 @@ function ExpenseModal({trucks, onSubmit, onClose, history}: any) {
           <select name="truckId" required className="inp w-full p-3.5 appearance-none"
             value={selectedTruck} onChange={e => setSelectedTruck(e.target.value)}>
             <option value="">Seleccione Unidad...</option>
-            {trucks.map((t:any) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
+            {trucks.map((t) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
           </select>
 
           <div className="space-y-2">
@@ -1817,7 +1810,6 @@ function ExpenseModal({trucks, onSubmit, onClose, history}: any) {
                   {kmError&&<p className="text-[7px] mt-0.5 font-semibold" style={{color:'var(--danger)'}}>{kmError}</p>}
                 </div>
               </div>
-              {/* Ticket photo */}
               <div>
                 <label className="text-[7px] font-bold uppercase tracking-wider mb-1 block" style={{color:'var(--oxford)'}}>Foto del Ticket (recomendado)</label>
                 {ticketFile
@@ -1861,9 +1853,9 @@ function ExpenseModal({trucks, onSubmit, onClose, history}: any) {
 
 // ─── EDIT EXPENSE MODAL ───────────────────────────────────────────────────────
 
-function EditExpenseModal({item,fmt,onSave,onClose}: any) {
+function EditExpenseModal({item,fmt,onSave,onClose}) {
   const [newAmount, setNewAmount] = useState(String(item.amount));
-  const [motivo,    setMotivo]    = useState('');
+  const [motivo,     setMotivo]    = useState('');
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 overlay">
       <div className="modal w-full max-w-md p-7">
@@ -1888,7 +1880,7 @@ function EditExpenseModal({item,fmt,onSave,onClose}: any) {
             <div className="rounded-xl p-3 border" style={{background:'var(--ice)',borderColor:'var(--mist)'}}>
               <p className="text-[8px] font-bold uppercase mb-2 flex items-center gap-1" style={{color:'var(--oxford)'}}><History size={10}/> Historial</p>
               <div className="space-y-2 max-h-28 overflow-y-auto">
-                {[...item.historialEdiciones].reverse().map((ed:any,i:number) => (
+                {[...item.historialEdiciones].reverse().map((ed,i) => (
                   <div key={i} className="text-[8px] border-l-2 pl-2" style={{borderColor:'var(--accent)',color:'var(--steel)'}}>
                     <span className="font-bold" style={{color:'var(--accent)'}}>{ed.editadoPor}</span> cambió{' '}
                     <span className="line-through" style={{color:'var(--mist)'}}>{fmt(ed.montoAnterior)}</span> → <span className="font-bold">{fmt(ed.montoNuevo)}</span>
@@ -1912,14 +1904,14 @@ function EditExpenseModal({item,fmt,onSave,onClose}: any) {
 
 // ─── HISTORY TABLE ────────────────────────────────────────────────────────────
 
-function HistoryTable({allPeriod,trucks,truckFilter,onTruckFilter,onBaja,onEdit,fmt,onExport}: any) {
+function HistoryTable({allPeriod,trucks,truckFilter,onTruckFilter,onBaja,onEdit,fmt,onExport}) {
   const [showBaja, setShowBaja] = useState(false);
-  const displayed = allPeriod.filter((h:any) => {
+  const displayed = allPeriod.filter((h) => {
     const okBaja  = showBaja?true:(h.status!=='baja');
     const okTruck = truckFilter?h.truckId===truckFilter:true;
     return okBaja&&okTruck;
   });
-  const total = displayed.filter((h:any)=>h.status!=='baja').reduce((a:number,h:any)=>a+Number(h.amount),0);
+  const total = displayed.filter((h)=>h.status!=='baja').reduce((a,h)=>a+Number(h.amount),0);
 
   return (
     <div className="card overflow-hidden">
@@ -1927,19 +1919,18 @@ function HistoryTable({allPeriod,trucks,truckFilter,onTruckFilter,onBaja,onEdit,
         <div>
           <h2 className="font-display font-black uppercase text-sm" style={{color:'var(--navy)'}}>Movimientos</h2>
           <p className="font-mono text-[10px] font-bold mt-0.5" style={{color:'var(--accent)'}}>
-            {displayed.filter((h:any)=>h.status!=='baja').length} registros · {fmt(total)}
+            {displayed.filter((h)=>h.status!=='baja').length} registros · {fmt(total)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <select value={truckFilter} onChange={e=>onTruckFilter(e.target.value)} className="inp text-xs px-3 py-2 outline-none">
             <option value="">Todas las unidades</option>
-            {trucks.map((t:any) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
+            {trucks.map((t) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
           </select>
           <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer whitespace-nowrap" style={{color:'var(--oxford)'}}>
             <input type="checkbox" checked={showBaja} onChange={e=>setShowBaja(e.target.checked)} className="rounded" style={{accentColor:'var(--accent)'}} />
             Ver bajas
           </label>
-          {/* XLS button moved here, closer to the data */}
           <button onClick={onExport} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-bold border transition-all"
             style={{color:'var(--success)',borderColor:'#bbf7d0',background:'#f0fdf4'}}>
             ↓ Exportar XLS
@@ -1956,7 +1947,7 @@ function HistoryTable({allPeriod,trucks,truckFilter,onTruckFilter,onBaja,onEdit,
             </tr>
           </thead>
           <tbody className="divide-y" style={{borderColor:'var(--ice)'}}>
-            {displayed.map((item:any) => {
+            {displayed.map((item) => {
               const esBaja  = item.status==='baja';
               const editado = item.ultimaEdicion;
               return (
@@ -2004,24 +1995,24 @@ function HistoryTable({allPeriod,trucks,truckFilter,onTruckFilter,onBaja,onEdit,
 
 // ─── DRIVER VIEW ──────────────────────────────────────────────────────────────
 
-function DriverView({trucks, userEmail, onSubmit, onSignOut}: any) {
-  const [step,       setStep]       = useState<'select'|'fuel'|'maint'|'done'>('select');
-  const [saving,     setSaving]     = useState(false);
-  const [ticketFile, setTicketFile] = useState<File|null>(null);
+function DriverView({trucks, userEmail, onSubmit, onSignOut}) {
+  const [step,       setStep]       = useState('select');
+  const [saving,      setSaving]     = useState(false);
+  const [ticketFile, setTicketFile] = useState(null);
   const [kmError,    setKmError]    = useState('');
 
-  const handleFuel = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleFuel = async (e) => {
     if (kmError) return;
     e.preventDefault(); setSaving(true);
     await onSubmit(e,{category:'combustible',fotoTicket:ticketFile});
     setSaving(false); setStep('done');
   };
 
-  const handleMaint = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleMaint = async (e) => {
     e.preventDefault(); setSaving(true);
     const fd = new FormData(e.currentTarget);
-    const subCat    = fd.get('subCat')    as string;
-    const variosDesc = fd.get('variosDesc') as string;
+    const subCat    = fd.get('subCat');
+    const variosDesc = fd.get('variosDesc');
     await onSubmit(e,{category:subCat||'varios',variosDesc:subCat==='varios'?variosDesc:''});
     setSaving(false); setStep('done');
   };
@@ -2056,7 +2047,7 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}: any) {
               {key:'fuel',  emoji:'⛽', title:'Combustible',   sub:'Registrar carga con litros y KM', color:'#bae6fd', bg:'white'},
               {key:'maint', emoji:'🔧', title:'Mantenimiento', sub:'Mecánico, gomas, varios...',       color:'var(--mist)', bg:'white'},
             ].map(item => (
-              <button key={item.key} onClick={() => setStep(item.key as any)}
+              <button key={item.key} onClick={() => setStep(item.key)}
                 className="w-full flex items-center gap-4 p-5 rounded-2xl border-2 transition-all text-left"
                 style={{background:item.bg, borderColor:item.color}}>
                 <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shrink-0" style={{background:'var(--ice)'}}>{item.emoji}</div>
@@ -2075,7 +2066,7 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}: any) {
             <button type="button" onClick={() => setStep('select')} className="text-[9px] font-bold uppercase tracking-wider" style={{color:'var(--oxford)'}}>← Volver</button>
             <select name="truckId" required className="inp w-full p-4 text-base font-bold">
               <option value="">Seleccioná tu camión...</option>
-              {trucks.map((t:any) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
+              {trucks.map((t) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
             </select>
             <div className="grid grid-cols-2 gap-3">
               <div className="card p-4">
@@ -2083,7 +2074,7 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}: any) {
                 <input name="km_registro" type="number" inputMode="numeric" placeholder="0" required
                   className="w-full font-data text-2xl font-black outline-none bg-transparent" style={{color:'var(--navy)'}}
                   onChange={e => {
-                    const t = trucks.find((tr:any) => tr.id===(document.querySelector('[name=truckId]') as any)?.value);
+                    const t = trucks.find((tr) => tr.id===(document.querySelector('[name=truckId]'))?.value);
                     const last = t?.kmActual||0;
                     if (parseFloat(e.target.value)<=last) setKmError(`Debe ser > ${last.toLocaleString()} km`);
                     else setKmError('');
@@ -2130,7 +2121,7 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}: any) {
             <button type="button" onClick={() => setStep('select')} className="text-[9px] font-bold uppercase tracking-wider" style={{color:'var(--oxford)'}}>← Volver</button>
             <select name="truckId" required className="inp w-full p-4 text-base font-bold">
               <option value="">Seleccioná tu camión...</option>
-              {trucks.map((t:any) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
+              {trucks.map((t) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
             </select>
             <div>
               <p className="text-[8px] font-bold uppercase mb-2" style={{color:'var(--oxford)'}}>Tipo de trabajo *</p>
@@ -2161,7 +2152,7 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}: any) {
 
 // ─── SMALL COMPONENTS ────────────────────────────────────────────────────────
 
-function SubKpi({label,value,Icon,accent,bg,border,suffix,mono}: any) {
+function SubKpi({label,value,Icon,accent,bg,border,suffix,mono}) {
   return (
     <div className="kpi-sub p-5 flex flex-col justify-between" style={{minHeight:130}}>
       <div className="flex items-center justify-between mb-3">
@@ -2176,7 +2167,7 @@ function SubKpi({label,value,Icon,accent,bg,border,suffix,mono}: any) {
   );
 }
 
-function BarTooltip({active,payload,fmt}: any) {
+function BarTooltip({active,payload,fmt}) {
   if (!active||!payload?.length) return null;
   return (
     <div className="p-3 rounded-xl shadow-2xl text-white text-xs" style={{background:'var(--navy)'}}>
@@ -2187,7 +2178,7 @@ function BarTooltip({active,payload,fmt}: any) {
   );
 }
 
-function Notification({banner}: any) {
+function Notification({banner}) {
   if (!banner) return null;
   const isErr = banner.type==='error';
   return (
@@ -2212,10 +2203,10 @@ function LoadingScreen() {
   );
 }
 
-function LoginComponent({onLogin}: any) {
+function LoginComponent({onLogin}) {
   const [showPass, setShowPass] = useState(false);
   const [loading,  setLoading]  = useState(false);
-  const submit = async (e: React.FormEvent<HTMLFormElement>) => { setLoading(true); await onLogin(e); setLoading(false); };
+  const submit = async (e) => { setLoading(true); await onLogin(e); setLoading(false); };
 
   return (
     <div className="login-bg min-h-screen flex items-center justify-center p-4">
