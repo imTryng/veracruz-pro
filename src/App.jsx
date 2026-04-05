@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, PieChart, Pie,
@@ -11,7 +11,9 @@ import {
   Users, Shield, Clock, Eye, EyeOff,
   Building, ChevronDown, ChevronUp, Ban,
   AlertCircle as AlertIcon, Edit2, History,
-  Fuel, Zap, Activity, BarChart2, ArrowUp, ArrowDown, Minus
+  Fuel, Zap, Activity, BarChart2, ArrowUp, ArrowDown, Minus,
+  Upload, X, FileText, Image as ImageIcon, Hash, Calendar,
+  Wrench, Camera, ChevronRight, ShieldAlert, ShieldCheck
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import {
@@ -33,26 +35,113 @@ const firebaseConfig = {
   measurementId: "G-9D1MDPZ22H"
 };
 
-const app = initializeApp(firebaseConfig);
+const app  = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+const db   = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'veracruz-fleet-pro-v2';
 
-const ROLES = { ADMIN: 'admin', USER: 'user' };
-const TODAY = new Date('2026-04-03');
+// ─── Constants & Enums ────────────────────────────────────────────────────────
 
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
-function alertVencimiento(fechaStr) {
-  if (!fechaStr) return null;
-  const fecha = new Date(fechaStr);
-  const diffDays = Math.floor((fecha - TODAY) / (1000 * 60 * 60 * 24));
-  if (diffDays < 0) return 'vencido';
-  if (diffDays <= 30) return 'proximo';
-  return null;
+const ROLES = { ADMIN: 'admin', USER: 'user', DRIVER: 'driver' };
+const TODAY = new Date();
+
+const FUEL_TYPES   = ['diesel','nafta','gnc'] as const;
+const TRUCK_STATUS = ['disponible','en_viaje','en_taller','inactivo'] as const;
+
+const ALERT_THRESHOLDS = {
+  DOCS_WARNING_DAYS:   15,
+  SERVICE_WARNING_KM:  1000,
+  SERVICE_CRITICAL_KM: 500,
+  EFFICIENCY_DROP_PCT: 15,
+} as const;
+
+const EFFICIENCY_THRESHOLDS = { OPTIMO: 4, REGULAR: 3 } as const;
+
+const STATUS_META: Record<string,{label:string;color:string;bg:string;border:string}> = {
+  disponible: { label:'Disponible', color:'var(--success)', bg:'#f0fdf4', border:'#bbf7d0' },
+  en_viaje:   { label:'En Viaje',   color:'var(--accent)',  bg:'#eff6ff', border:'#bfdbfe' },
+  en_taller:  { label:'En Taller',  color:'var(--warn)',    bg:'#fffbeb', border:'#fde68a' },
+  inactivo:   { label:'Inactivo',   color:'var(--oxford)',  bg:'var(--ice)', border:'var(--mist)' },
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function daysUntil(dateStr: string, today: Date = TODAY): number {
+  if (!dateStr) return Infinity;
+  const target = new Date(dateStr + 'T00:00:00');
+  const base   = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.floor((target.getTime() - base.getTime()) / 86_400_000);
 }
-function isFuel(label) { return (label || '').toLowerCase().startsWith('combustible'); }
 
-// ─── GLOBAL STYLES ────────────────────────────────────────────────────────────
+function isFuel(label: string) { return (label || '').toLowerCase().startsWith('combustible'); }
+
+function calcRendimiento(prevKm: number, currKm: number, litros: number): number | null {
+  if (currKm <= prevKm || litros <= 0) return null;
+  return (currKm - prevKm) / litros;
+}
+
+function classifyRend(v: number): 'optimo'|'regular'|'deficiente' {
+  if (v >= EFFICIENCY_THRESHOLDS.OPTIMO)  return 'optimo';
+  if (v >= EFFICIENCY_THRESHOLDS.REGULAR) return 'regular';
+  return 'deficiente';
+}
+
+// ─── Alert engine (pure) ──────────────────────────────────────────────────────
+
+function generateAlerts(trucks: any[], history: any[]): any[] {
+  const alerts: any[] = [];
+
+  for (const truck of trucks) {
+    const base = { truckId: truck.id, patente: truck.patente, chofer: truck.chofer };
+
+    // 1. Seguro
+    if (truck.seguro_venc) {
+      const d = daysUntil(truck.seguro_venc);
+      if (d < 0)
+        alerts.push({ ...base, key:`${truck.id}-seg-v`, type:'seguro_vencido',   severity:'critical', message:`Seguro VENCIDO hace ${Math.abs(d)} día${Math.abs(d)!==1?'s':''}`, daysRemaining:d, rawValue:truck.seguro_venc });
+      else if (d <= ALERT_THRESHOLDS.DOCS_WARNING_DAYS)
+        alerts.push({ ...base, key:`${truck.id}-seg-p`, type:'seguro_proximo',   severity:'warning',  message:`Seguro vence en ${d} día${d!==1?'s':''}`,                          daysRemaining:d, rawValue:truck.seguro_venc });
+    }
+
+    // 2. VTV
+    if (truck.vtv_venc) {
+      const d = daysUntil(truck.vtv_venc);
+      if (d < 0)
+        alerts.push({ ...base, key:`${truck.id}-vtv-v`, type:'vtv_vencido',      severity:'critical', message:`VTV VENCIDA hace ${Math.abs(d)} día${Math.abs(d)!==1?'s':''}`,     daysRemaining:d, rawValue:truck.vtv_venc });
+      else if (d <= ALERT_THRESHOLDS.DOCS_WARNING_DAYS)
+        alerts.push({ ...base, key:`${truck.id}-vtv-p`, type:'vtv_proximo',      severity:'warning',  message:`VTV vence en ${d} día${d!==1?'s':''}`,                             daysRemaining:d, rawValue:truck.vtv_venc });
+    }
+
+    // 3. Service preventivo por KM
+    if (truck.kmProximoService && truck.kmProximoService > 0) {
+      const kmRem = truck.kmProximoService - (truck.kmActual || 0);
+      if (kmRem <= 0)
+        alerts.push({ ...base, key:`${truck.id}-svc-v`, type:'service_vencido',  severity:'critical', message:`Service VENCIDO — exceso ${Math.abs(kmRem).toLocaleString('es-AR')} km`, kmRemaining:kmRem, rawValue:truck.kmProximoService });
+      else if (kmRem <= ALERT_THRESHOLDS.SERVICE_CRITICAL_KM)
+        alerts.push({ ...base, key:`${truck.id}-svc-c`, type:'service_proximo',  severity:'critical', message:`Service en ${kmRem.toLocaleString('es-AR')} km — ¡URGENTE!`,            kmRemaining:kmRem, rawValue:truck.kmProximoService });
+      else if (kmRem <= ALERT_THRESHOLDS.SERVICE_WARNING_KM)
+        alerts.push({ ...base, key:`${truck.id}-svc-w`, type:'service_proximo',  severity:'warning',  message:`Service próximo — restan ${kmRem.toLocaleString('es-AR')} km`,           kmRemaining:kmRem, rawValue:truck.kmProximoService });
+    }
+
+    // 4. Rendimiento combustible
+    const loads = history
+      .filter(h => h.truckId===truck.id && h.status!=='baja' && isFuel(h.categoryLabel) && (h.litros||0)>0 && (h.km_registro||0)>0)
+      .sort((a,b) => a.timestamp - b.timestamp);
+    if (loads.length >= 2) {
+      const last = loads[loads.length - 1];
+      const prev = loads[loads.length - 2];
+      const rend = calcRendimiento(prev.km_registro, last.km_registro, last.litros);
+      if (rend !== null && rend < EFFICIENCY_THRESHOLDS.REGULAR)
+        alerts.push({ ...base, key:`${truck.id}-rend`, type:'rendimiento_bajo', severity: rend<2?'critical':'warning', message:`Rendimiento bajo: ${rend.toFixed(2)} km/l`, rawValue:rend });
+    }
+  }
+
+  const order: Record<string,number> = { critical:0, warning:1, info:2 };
+  return alerts.sort((a,b) => order[a.severity] - order[b.severity]);
+}
+
+// ─── Global styles ────────────────────────────────────────────────────────────
+
 const globalStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,300;0,400;0,600;0,700;0,800;0,900;1,700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
@@ -81,20 +170,17 @@ const globalStyles = `
 
   body { background: var(--ice); color: var(--navy); }
 
-  /* ── Animations ── */
   @keyframes fadeUp   { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
-  @keyframes fadeIn   { from { opacity:0; }                             to { opacity:1; } }
+  @keyframes fadeIn   { from { opacity:0; }  to { opacity:1; } }
   @keyframes floatY   { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
   @keyframes pulseDot { 0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.45)} 60%{box-shadow:0 0 0 9px rgba(37,99,235,0)} }
   @keyframes shimmer  { from{background-position:-300% center} to{background-position:300% center} }
 
-  .anim-up   { animation: fadeUp  .5s ease both; }
-  .anim-in   { animation: fadeIn  .4s ease both; }
-  .d1 { animation-delay:.08s } .d2 { animation-delay:.16s }
-  .d3 { animation-delay:.24s } .d4 { animation-delay:.32s }
-  .float { animation: floatY 3.5s ease-in-out infinite; }
+  .anim-up { animation: fadeUp  .5s ease both; }
+  .anim-in { animation: fadeIn  .4s ease both; }
+  .d1{animation-delay:.08s} .d2{animation-delay:.16s} .d3{animation-delay:.24s} .d4{animation-delay:.32s}
+  .float   { animation: floatY 3.5s ease-in-out infinite; }
 
-  /* ── Login ── */
   .login-bg {
     background: linear-gradient(160deg, var(--navy) 0%, #0a1628 55%, #0d1f3c 100%);
     position: relative; overflow: hidden;
@@ -134,61 +220,43 @@ const globalStyles = `
     background-size: 200% auto; transition: all .3s ease;
     box-shadow: 0 8px 28px rgba(37,99,235,.42);
   }
-  .login-btn:hover {
-    background-position: right center;
-    box-shadow: 0 12px 36px rgba(37,99,235,.58); transform: translateY(-1px);
-  }
+  .login-btn:hover { background-position: right center; box-shadow: 0 12px 36px rgba(37,99,235,.58); transform: translateY(-1px); }
 
-  /* ── Navigation ── */
   .nav-shell {
-    background: rgba(255,255,255,.96);
-    backdrop-filter: blur(20px);
-    border-bottom: 1px solid rgba(37,99,235,.07);
-    box-shadow: 0 1px 16px rgba(11,17,32,.07);
+    background: rgba(255,255,255,.96); backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(37,99,235,.07); box-shadow: 0 1px 16px rgba(11,17,32,.07);
   }
   .tab-pill {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-weight: 700; text-transform: uppercase; letter-spacing:.06em;
-    font-size: 11px; transition: all .2s ease;
-    color: var(--oxford);
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+    text-transform: uppercase; letter-spacing:.06em; font-size: 11px;
+    transition: all .2s ease; color: var(--oxford);
   }
-  .tab-pill.active {
-    background: var(--navy); color: white;
-    box-shadow: 0 3px 12px rgba(11,17,32,.25);
-  }
+  .tab-pill.active { background: var(--navy); color: white; box-shadow: 0 3px 12px rgba(11,17,32,.25); }
   .tab-pill:hover:not(.active) { color: var(--navy); background: var(--ice); }
 
-  /* ── Cards ── */
-  .card {
-    background: white; border: 1px solid var(--mist);
-    border-radius: 16px; transition: all .25s ease;
-  }
+  .card { background: white; border: 1px solid var(--mist); border-radius: 16px; transition: all .25s ease; }
   .card:hover { border-color: rgba(37,99,235,.18); box-shadow: 0 8px 28px rgba(37,99,235,.09); }
 
   .kpi-hero {
     background: linear-gradient(150deg, var(--navy) 0%, var(--navy-3) 100%);
     border: 1px solid var(--steel); border-radius:18px;
-    box-shadow: 0 16px 48px rgba(11,17,32,.35);
-    position: relative; overflow: hidden;
+    box-shadow: 0 16px 48px rgba(11,17,32,.35); position: relative; overflow: hidden;
   }
   .kpi-hero::before {
     content:''; position:absolute; inset:0;
     background: radial-gradient(ellipse at 20% 50%, rgba(37,99,235,.15) 0%, transparent 60%);
   }
   .kpi-sub {
-    background: white; border: 1px solid var(--mist); border-radius: 14px;
-    transition: all .25s ease;
+    background: white; border: 1px solid var(--mist); border-radius: 14px; transition: all .25s ease;
   }
   .kpi-sub:hover { border-color: rgba(37,99,235,.2); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(37,99,235,.1); }
 
-  /* ── Truck card ── */
   .truck-card {
     background: white; border: 1px solid var(--mist); border-radius:18px;
     transition: all .28s cubic-bezier(.34,1.56,.64,1);
   }
   .truck-card:hover { transform:translateY(-3px); border-color:rgba(37,99,235,.22); box-shadow: 0 14px 36px rgba(37,99,235,.11); }
 
-  /* ── FAB ── */
   .fab {
     background: linear-gradient(135deg, #1d4ed8, #2563eb);
     box-shadow: 0 8px 28px rgba(37,99,235,.48);
@@ -197,63 +265,58 @@ const globalStyles = `
   }
   .fab:hover { transform:scale(1.12) rotate(42deg); box-shadow:0 12px 36px rgba(37,99,235,.65); }
 
-  /* ── Modals ── */
   .overlay { background:rgba(6,10,20,.78); backdrop-filter:blur(14px); }
   .modal   { background:white; box-shadow: 0 40px 90px rgba(0,0,0,.28); border-radius:24px; }
 
-  /* ── Form inputs ── */
   .inp {
-    background: var(--ice); border: 1.5px solid var(--mist);
-    color: var(--navy); border-radius:12px;
-    transition: all .2s ease; font-family: 'DM Sans', sans-serif;
+    background: var(--ice); border: 1.5px solid var(--mist); color: var(--navy);
+    border-radius:12px; transition: all .2s ease; font-family: 'DM Sans', sans-serif;
   }
   .inp:focus { background:white; border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.12); outline:none; }
   .inp::placeholder { color:var(--oxford); }
 
-  /* ── Efficiency badges ── */
-  .badge-good  { background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
-  .badge-warn  { background:#fef9c3; color:#a16207; border:1px solid #fde047; }
-  .badge-bad   { background:#fee2e2; color:#dc2626; border:1px solid #fca5a5; }
+  .badge-good { background:#dcfce7; color:#15803d; border:1px solid #bbf7d0; }
+  .badge-warn { background:#fef9c3; color:#a16207; border:1px solid #fde047; }
+  .badge-bad  { background:#fee2e2; color:#dc2626; border:1px solid #fca5a5; }
 
-  /* ── Misc ── */
   .alert-strip { background:linear-gradient(135deg,#fffbeb,#fef3c7); border:1px solid #fcd34d; border-radius:16px; }
   .history-row:hover { background:var(--ice); }
   .accent-text { color: var(--accent); }
   .fuel-text   { color: var(--fuel); }
 
-  /* ── Scrollbar ── */
   ::-webkit-scrollbar { width:5px; height:5px; }
   ::-webkit-scrollbar-track { background:transparent; }
   ::-webkit-scrollbar-thumb { background:var(--mist); border-radius:10px; }
 `;
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
+
 export default function App() {
-  const [user, setUser]           = useState(null);
-  const [userRole, setUserRole]   = useState(null);
+  const [user, setUser]           = useState<any>(null);
+  const [userRole, setUserRole]   = useState<string|null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [showLogin, setShowLogin] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [trucks, setTrucks]       = useState([]);
-  const [history, setHistory]     = useState([]);
-  const [users, setUsers]         = useState([]);
-  const [clientes, setClientes]   = useState([]);
-  const [selectedClient, setSelectedClient] = useState(null);
+  const [trucks, setTrucks]       = useState<any[]>([]);
+  const [history, setHistory]     = useState<any[]>([]);
+  const [users, setUsers]         = useState<any[]>([]);
+  const [clientes, setClientes]   = useState<any[]>([]);
+  const [selectedClient, setSelectedClient] = useState<string|null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [historyTruckFilter, setHistoryTruckFilter] = useState('');
   const [dateRange, setDateRange] = useState({
     start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-    end: new Date().toISOString().split('T')[0]
+    end:   new Date().toISOString().split('T')[0],
   });
-  const [notif, setNotif]   = useState(null);
-  const [dbError, setDbError] = useState(null);
+  const [notif, setNotif]   = useState<any>(null);
+  const [dbError, setDbError] = useState<string|null>(null);
   const [modals, setModals] = useState({
-    expense:false, truck:false, delete:null,
+    expense:false, truck:false, delete:null as any,
     users:false, addUser:false, clientes:false, addCliente:false,
-    editTruck:null, editExpense:null
+    editTruck:null as any, editExpense:null as any,
   });
 
-  const showNotif = (msg, type='success') => { setNotif({msg,type}); setTimeout(()=>setNotif(null),4000); };
+  const showNotif = (msg: string, type='success') => { setNotif({msg,type}); setTimeout(()=>setNotif(null),4000); };
 
   // Auth
   useEffect(() => {
@@ -263,85 +326,84 @@ export default function App() {
         try {
           const ref  = doc(db,'artifacts',appId,'public','data','users',u.uid);
           const snap = await getDoc(ref);
-          setUserRole(snap.exists() ? (snap.data().role||ROLES.ADMIN) : ROLES.ADMIN);
-          if (!snap.exists()) {
+          setUserRole(snap.exists() ? (snap.data().role || ROLES.ADMIN) : ROLES.ADMIN);
+          if (!snap.exists())
             await addDoc(collection(db,'artifacts',appId,'public','data','users'),
               {uid:u.uid,email:u.email,role:ROLES.ADMIN,createdAt:Date.now()}).catch(()=>{});
-          }
         } catch { setUserRole(ROLES.ADMIN); }
       } else { setShowLogin(true); }
       setAuthLoading(false);
     });
-    return ()=>unsub();
+    return () => unsub();
   }, []);
 
   // Realtime listeners
   useEffect(() => {
     if (!user) return;
-    const uT = onSnapshot(collection(db,'artifacts',appId,'public','data','trucks'), s=>{
-      setTrucks(s.docs.map(d=>({id:d.id,...d.data()}))); setDbError(null);
-    }, ()=>setDbError('Error conectando flota'));
-    const uH = onSnapshot(query(collection(db,'artifacts',appId,'public','data','history'),orderBy('timestamp','desc')), s=>{
-      setHistory(s.docs.map(d=>({id:d.id,...d.data()}))); setDbError(null);
-    }, ()=>setDbError('Error conectando historial'));
-    return ()=>{ uT(); uH(); };
+    const uT = onSnapshot(collection(db,'artifacts',appId,'public','data','trucks'), s => {
+      setTrucks(s.docs.map(d => ({id:d.id,...d.data()}))); setDbError(null);
+    }, () => setDbError('Error conectando flota'));
+    const uH = onSnapshot(query(collection(db,'artifacts',appId,'public','data','history'),orderBy('timestamp','desc')), s => {
+      setHistory(s.docs.map(d => ({id:d.id,...d.data()}))); setDbError(null);
+    }, () => setDbError('Error conectando historial'));
+    return () => { uT(); uH(); };
   }, [user]);
 
   useEffect(() => {
-    if (!user||userRole!==ROLES.ADMIN) return;
-    const u = onSnapshot(collection(db,'artifacts',appId,'public','data','users'), s=>{
-      setUsers(s.docs.map(d=>({id:d.id,...d.data()})));
-    },()=>{});
-    return ()=>u();
-  }, [user,userRole]);
+    if (!user || userRole !== ROLES.ADMIN) return;
+    const u = onSnapshot(collection(db,'artifacts',appId,'public','data','users'), s => {
+      setUsers(s.docs.map(d => ({id:d.id,...d.data()})));
+    }, () => {});
+    return () => u();
+  }, [user, userRole]);
 
   useEffect(() => {
     if (!user) return;
-    const u = onSnapshot(collection(db,'artifacts',appId,'public','data','clientes'), s=>{
-      const list = s.docs.map(d=>({id:d.id,...d.data()}));
+    const u = onSnapshot(collection(db,'artifacts',appId,'public','data','clientes'), s => {
+      const list = s.docs.map(d => ({id:d.id,...d.data()}));
       setClientes(list);
-      if (!selectedClient&&list.length>0) setSelectedClient(list[0].id);
-    },()=>{});
-    return ()=>u();
+      if (!selectedClient && list.length > 0) setSelectedClient(list[0].id);
+    }, () => {});
+    return () => u();
   }, [user]);
 
-  // ── Stats / memos ────────────────────────────────────────────────────────────
+  // ── Stats ─────────────────────────────────────────────────────────────────────
   const stats = useMemo(() => {
     const startTs = new Date(dateRange.start+"T00:00:00").getTime();
     const endTs   = new Date(dateRange.end  +"T23:59:59").getTime();
-    const activeHistory = history.filter(h=>
+    const activeHistory = history.filter(h =>
       h.timestamp>=startTs && h.timestamp<=endTs &&
       h.status!=='cancelled' && h.status!=='baja'
     );
-    const allPeriod = history.filter(h=>h.timestamp>=startTs&&h.timestamp<=endTs);
+    const allPeriod = history.filter(h => h.timestamp>=startTs && h.timestamp<=endTs);
 
-    const combustibleTotal    = activeHistory.filter(h=>isFuel(h.categoryLabel)).reduce((a,h)=>a+Number(h.amount),0);
-    const mantenimientoTotal  = activeHistory.filter(h=>!isFuel(h.categoryLabel)).reduce((a,h)=>a+Number(h.amount),0);
+    const combustibleTotal   = activeHistory.filter(h => isFuel(h.categoryLabel)).reduce((a,h) => a+Number(h.amount),0);
+    const mantenimientoTotal = activeHistory.filter(h => !isFuel(h.categoryLabel)).reduce((a,h) => a+Number(h.amount),0);
     const pieData = [
-      {name:'Combustible',value:combustibleTotal},
-      {name:'Mantenimiento',value:mantenimientoTotal}
-    ].filter(d=>d.value>0);
+      {name:'Combustible',   value:combustibleTotal},
+      {name:'Mantenimiento', value:mantenimientoTotal},
+    ].filter(d => d.value > 0);
 
-    const truckStats = trucks.map(t=>{
-      const tHist   = activeHistory.filter(h=>h.truckId===t.id);
-      const varTotal= tHist.reduce((a,h)=>a+(Number(h.amount)||0),0);
-      const fixTotal= (Number(t.seguro)||0)+(Number(t.vtv_costo)||0)+(Number(t.muni_costo)||0);
-      const total   = varTotal+fixTotal;
+    const truckStats = trucks.map(t => {
+      const tHist    = activeHistory.filter(h => h.truckId===t.id);
+      const varTotal = tHist.reduce((a,h) => a+(Number(h.amount)||0), 0);
+      const fixTotal = (Number(t.seguro)||0)+(Number(t.vtv_costo)||0)+(Number(t.muni_costo)||0);
+      const total    = varTotal + fixTotal;
       const kmRecorridos = Math.max(0,(t.kmActual||0)-(t.kmInicio||0));
       const costoPorKm   = kmRecorridos>0 ? total/kmRecorridos : 0;
-      const desglose = tHist.reduce((acc,h)=>{
+      const desglose = tHist.reduce((acc,h) => {
         const cat=h.categoryLabel||'VARIOS'; acc[cat]=(acc[cat]||0)+(Number(h.amount)||0); return acc;
-      },{});
-      return {...t,varTotal,fixTotal,total,kmRecorridos,costoPorKm,desglose};
-    }).filter(t=>
+      },{} as Record<string,number>);
+      return {...t, varTotal, fixTotal, total, kmRecorridos, costoPorKm, desglose};
+    }).filter(t =>
       t.patente.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (t.chofer||'').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    const grandTotal = truckStats.reduce((a,t)=>a+t.total,0);
+    const grandTotal = truckStats.reduce((a,t) => a+t.total, 0);
 
-    const monthlyMap = {};
-    history.filter(h=>h.status!=='baja'&&h.status!=='cancelled').forEach(h=>{
+    const monthlyMap: Record<string,any> = {};
+    history.filter(h => h.status!=='baja'&&h.status!=='cancelled').forEach(h => {
       const d   = new Date(h.timestamp);
       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
       const lbl = d.toLocaleString('es-AR',{month:'short',year:'2-digit'});
@@ -350,148 +412,117 @@ export default function App() {
       if (isFuel(h.categoryLabel)) monthlyMap[key].combustible+=Number(h.amount)||0;
       else monthlyMap[key].mantenimiento+=Number(h.amount)||0;
     });
-    const trendData = Object.entries(monthlyMap).sort(([a],[b])=>a.localeCompare(b)).slice(-6).map(([,v])=>v);
-    const ranking   = [...truckStats].sort((a,b)=>b.total-a.total);
-    const alertas   = trucks.filter(t=>alertVencimiento(t.seguro_venc)||alertVencimiento(t.vtv_venc))
-      .map(t=>({patente:t.patente,chofer:t.chofer,alertaSeguro:alertVencimiento(t.seguro_venc),alertaVtv:alertVencimiento(t.vtv_venc),seguro_venc:t.seguro_venc,vtv_venc:t.vtv_venc}));
+    const trendData = Object.entries(monthlyMap).sort(([a],[b]) => a.localeCompare(b)).slice(-6).map(([,v]) => v);
+    const ranking   = [...truckStats].sort((a,b) => b.total-a.total);
 
-    return {truckStats,grandTotal,totalExpenses:activeHistory.length,activeHistory,allPeriod,pieData,trendData,ranking,alertas};
-  }, [trucks,history,searchTerm,dateRange]);
+    return {truckStats,grandTotal,totalExpenses:activeHistory.length,activeHistory,allPeriod,pieData,trendData,ranking};
+  }, [trucks, history, searchTerm, dateRange]);
 
-  // ── Efficiency stats ─────────────────────────────────────────────────────────
+  // ── Fleet alerts ──────────────────────────────────────────────────────────────
+  const fleetAlerts = useMemo(() => generateAlerts(trucks, history), [trucks, history]);
+
+  // ── Efficiency ────────────────────────────────────────────────────────────────
   const efficiencyStats = useMemo(() => {
-    // All fuel loads from history, sorted per truck
     const fuelLoads = history
-      .filter(h=>isFuel(h.categoryLabel) && h.status!=='baja' && h.litros>0 && h.km_registro>0)
-      .sort((a,b)=>a.timestamp-b.timestamp);
+      .filter(h => isFuel(h.categoryLabel) && h.status!=='baja' && (h.litros||0)>0 && (h.km_registro||0)>0)
+      .sort((a,b) => a.timestamp - b.timestamp);
 
-    // Group by truck
-    const byTruck = {};
-    fuelLoads.forEach(h=>{
-      if (!byTruck[h.truckId]) byTruck[h.truckId]={truckId:h.truckId,patente:h.truck,loads:[]};
+    const byTruck: Record<string,any> = {};
+    fuelLoads.forEach(h => {
+      if (!byTruck[h.truckId]) byTruck[h.truckId] = {truckId:h.truckId,patente:h.truck,loads:[]};
       byTruck[h.truckId].loads.push(h);
     });
 
-    // Calculate km/l segments per truck
-    const truckEfficiency = Object.values(byTruck).map(({truckId,patente,loads})=>{
-      const segments = [];
-      for (let i=1;i<loads.length;i++) {
-        const prev = loads[i-1];
-        const curr = loads[i];
+    const truckEfficiency = Object.values(byTruck).map(({truckId,patente,loads}) => {
+      const segments: any[] = [];
+      for (let i=1; i<loads.length; i++) {
+        const prev = loads[i-1], curr = loads[i];
         const kmDiff = curr.km_registro - prev.km_registro;
-        if (kmDiff>0 && curr.litros>0) {
-          segments.push({
-            fecha: curr.date,
-            timestamp: curr.timestamp,
-            kmDiff,
-            litros: curr.litros,
-            kmPerLitro: kmDiff / curr.litros,
-            precioPorLitro: curr.precio_por_litro || (curr.amount/curr.litros),
-            monto: curr.amount,
-            km_registro: curr.km_registro
-          });
-        }
+        if (kmDiff>0 && curr.litros>0)
+          segments.push({ fecha:curr.date, timestamp:curr.timestamp, kmDiff, litros:curr.litros,
+            kmPerLitro:kmDiff/curr.litros, precioPorLitro:curr.precio_por_litro||(curr.amount/curr.litros),
+            monto:curr.amount, km_registro:curr.km_registro });
       }
-      const lastLoad  = loads[loads.length-1];
-      const prevLoad  = loads[loads.length-2];
-      const lastKmPL  = segments.length>0 ? segments[segments.length-1].kmPerLitro : null;
-      const prevKmPL  = segments.length>1 ? segments[segments.length-2].kmPerLitro : null;
-      const avgKmPL   = segments.length>0 ? segments.reduce((a,s)=>a+s.kmPerLitro,0)/segments.length : null;
-      const desvio    = (lastKmPL!==null && prevKmPL!==null) ? ((lastKmPL-prevKmPL)/prevKmPL)*100 : null;
-      return {truckId,patente,segments,lastKmPL,prevKmPL,avgKmPL,desvio,lastLoad,totalKm:segments.reduce((a,s)=>a+s.kmDiff,0),totalLitros:loads.reduce((a,l)=>a+l.litros,0)};
+      const lastKmPL = segments.length>0 ? segments[segments.length-1].kmPerLitro : null;
+      const prevKmPL = segments.length>1 ? segments[segments.length-2].kmPerLitro : null;
+      const avgKmPL  = segments.length>0 ? segments.reduce((a,s) => a+s.kmPerLitro,0)/segments.length : null;
+      const desvio   = (lastKmPL!==null&&prevKmPL!==null) ? ((lastKmPL-prevKmPL)/prevKmPL)*100 : null;
+      return {truckId,patente,segments,lastKmPL,prevKmPL,avgKmPL,desvio,lastLoad:loads[loads.length-1],
+        totalKm:segments.reduce((a,s)=>a+s.kmDiff,0), totalLitros:loads.reduce((a,l)=>a+l.litros,0)};
     });
 
-    // Fleet averages
-    const validEfficiencies = truckEfficiency.filter(t=>t.avgKmPL!==null);
-    const fleetAvgKmL = validEfficiencies.length>0 ? validEfficiencies.reduce((a,t)=>a+t.avgKmPL,0)/validEfficiencies.length : 0;
-
+    const valid = truckEfficiency.filter(t => t.avgKmPL!==null);
+    const fleetAvgKmL = valid.length>0 ? valid.reduce((a,t)=>a+t.avgKmPL!,0)/valid.length : 0;
     const totalFuelCost = history.filter(h=>isFuel(h.categoryLabel)&&h.status!=='baja').reduce((a,h)=>a+Number(h.amount),0);
     const totalKmFleet  = truckEfficiency.reduce((a,t)=>a+t.totalKm,0);
     const costPerKm     = totalKmFleet>0 ? totalFuelCost/totalKmFleet : 0;
-
-    const desvioAlerts  = truckEfficiency.filter(t=>t.desvio!==null && t.desvio<-15);
-
-    // Price evolution (last 12 fuel loads across fleet)
-    const priceEvolution = fuelLoads
-      .filter(h=>h.precio_por_litro>0)
-      .slice(-12)
-      .map(h=>({fecha:h.date?.split(',')[0]||'',precio:Number(h.precio_por_litro)||0,patente:h.truck}));
+    const desvioAlerts  = truckEfficiency.filter(t => t.desvio!==null && t.desvio<-ALERT_THRESHOLDS.EFFICIENCY_DROP_PCT);
+    const priceEvolution = fuelLoads.filter(h=>h.precio_por_litro>0).slice(-12)
+      .map(h => ({fecha:h.date?.split(',')[0]||'',precio:Number(h.precio_por_litro)||0,patente:h.truck}));
 
     return {truckEfficiency,fleetAvgKmL,costPerKm,desvioAlerts,priceEvolution,totalKmFleet};
   }, [history]);
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
-  const handleAddTruck = async (e) => {
-    e.preventDefault(); const fd=new FormData(e.target);
+  // ── Handlers ──────────────────────────────────────────────────────────────────
+
+  const handleAddTruck = async (data: any) => {
     try {
-      await addDoc(collection(db,'artifacts',appId,'public','data','trucks'),{
-        patente:fd.get('patente').toUpperCase(),chofer:fd.get('chofer'),
-        seguro:parseFloat(fd.get('seguro'))||0, vtv_costo:parseFloat(fd.get('vtv'))||0,
-        muni_costo:parseFloat(fd.get('muni'))||0,
-        seguro_venc:fd.get('seguro_venc')||'', vtv_venc:fd.get('vtv_venc')||'',
-        kmActual:parseFloat(fd.get('km'))||0, kmInicio:parseFloat(fd.get('km'))||0,
-        timestamp:Date.now()
+      await addDoc(collection(db,'artifacts',appId,'public','data','trucks'), {
+        ...data, historialService:[], timestamp:Date.now(),
       });
-      setModals(p=>({...p,truck:false})); showNotif("Unidad registrada");
+      setModals(p => ({...p,truck:false})); showNotif("Unidad registrada");
     } catch { showNotif("Error al guardar","error"); }
   };
 
-  const handleEditTruck = async (e,truckId) => {
-    e.preventDefault(); const fd=new FormData(e.target);
+  const handleEditTruck = async (data: any, truckId: string) => {
     try {
-      await updateDoc(doc(db,'artifacts',appId,'public','data','trucks',truckId),{
-        chofer:fd.get('chofer'),
-        seguro:parseFloat(fd.get('seguro'))||0, vtv_costo:parseFloat(fd.get('vtv'))||0,
-        muni_costo:parseFloat(fd.get('muni'))||0,
-        seguro_venc:fd.get('seguro_venc')||'', vtv_venc:fd.get('vtv_venc')||'',
-        kmActual:parseFloat(fd.get('km'))||0,
-        editadoPor:user.email,editadoAt:Date.now()
+      await updateDoc(doc(db,'artifacts',appId,'public','data','trucks',truckId), {
+        ...data, editadoPor:user.email, editadoAt:Date.now(),
       });
-      setModals(p=>({...p,editTruck:null})); showNotif("Unidad actualizada");
+      setModals(p => ({...p,editTruck:null})); showNotif("Unidad actualizada");
     } catch { showNotif("Error al actualizar","error"); }
   };
 
-  const handleAddExpense = async (e,extra={}) => {
-    e.preventDefault(); const fd=new FormData(e.target);
-    const truckId=fd.get('truckId');
-    const truck=trucks.find(t=>t.id===truckId);
-    const amount=parseFloat(fd.get('amount'));
-    const category=extra.category||'varios';
-    const variosDesc=extra.variosDesc||'';
-    const km=fd.get('km');
-    const litros=parseFloat(fd.get('litros'))||0;
-    const km_registro=parseFloat(fd.get('km_registro'))||0;
-    const label=category==='varios'&&variosDesc ? `VARIOS - ${variosDesc.toUpperCase()}` : category.toUpperCase();
-    const precio_por_litro=litros>0 ? amount/litros : 0;
+  const handleAddExpense = async (e: React.FormEvent<HTMLFormElement>, extra: any={}) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const truckId  = fd.get('truckId') as string;
+    const truck    = trucks.find(t => t.id===truckId);
+    const amount   = parseFloat(fd.get('amount') as string);
+    const category = extra.category || 'varios';
+    const label    = category==='varios'&&extra.variosDesc
+      ? `VARIOS - ${extra.variosDesc.toUpperCase()}`
+      : category.toUpperCase();
+    const litros      = parseFloat(fd.get('litros') as string)||0;
+    const km_registro = parseFloat(fd.get('km_registro') as string)||0;
+    const precio_por_litro = litros>0 ? amount/litros : 0;
     try {
-      await addDoc(collection(db,'artifacts',appId,'public','data','history'),{
-        truckId,truck:truck.patente,categoryLabel:label,amount,
-        responsible:user.email,status:'active',
-        timestamp:Date.now(),date:new Date().toLocaleString('es-AR'),
-        historialEdiciones:[],
-        ...(isFuel(label) && {litros,km_registro,precio_por_litro})
+      await addDoc(collection(db,'artifacts',appId,'public','data','history'), {
+        truckId, truck:truck.patente, categoryLabel:label, amount,
+        responsible:user.email, status:'active', timestamp:Date.now(),
+        date:new Date().toLocaleString('es-AR'), historialEdiciones:[],
+        ...(isFuel(label)&&{litros,km_registro,precio_por_litro}),
       });
-      if (isFuel(label)&&km_registro>0) {
+      if (isFuel(label)&&km_registro>0)
         await updateDoc(doc(db,'artifacts',appId,'public','data','trucks',truckId),{kmActual:km_registro});
-      }
-      setModals(p=>({...p,expense:false})); showNotif("Gasto registrado");
+      setModals(p => ({...p,expense:false})); showNotif("Gasto registrado");
     } catch { showNotif("Error al registrar","error"); }
   };
 
-  const handleEditExpense = async (item,newAmount,motivo) => {
-    if (!newAmount||isNaN(newAmount)) return showNotif("Monto inválido","error");
-    const edicion={montoAnterior:item.amount,montoNuevo:parseFloat(newAmount),editadoPor:user.email,editadoAt:Date.now(),fecha:new Date().toLocaleString('es-AR'),motivo:motivo||''};
+  const handleEditExpense = async (item: any, newAmount: string, motivo: string) => {
+    if (!newAmount||isNaN(Number(newAmount))) return showNotif("Monto inválido","error");
+    const edicion = {montoAnterior:item.amount,montoNuevo:parseFloat(newAmount),editadoPor:user.email,editadoAt:Date.now(),fecha:new Date().toLocaleString('es-AR'),motivo:motivo||''};
     try {
-      await updateDoc(doc(db,'artifacts',appId,'public','data','history',item.id),{
+      await updateDoc(doc(db,'artifacts',appId,'public','data','history',item.id), {
         amount:parseFloat(newAmount),
         historialEdiciones:[...(item.historialEdiciones||[]),edicion],
-        ultimaEdicion:edicion
+        ultimaEdicion:edicion,
       });
-      setModals(p=>({...p,editExpense:null})); showNotif("Monto actualizado");
+      setModals(p => ({...p,editExpense:null})); showNotif("Monto actualizado");
     } catch { showNotif("Error al editar","error"); }
   };
 
-  const handleBajaExpense = async (item) => {
+  const handleBajaExpense = async (item: any) => {
     try {
       await updateDoc(doc(db,'artifacts',appId,'public','data','history',item.id),{status:'baja',bajaBy:user.email,bajaAt:Date.now()});
       showNotif("Registro dado de baja");
@@ -502,38 +533,47 @@ export default function App() {
     if (!modals.delete) return;
     try {
       await deleteDoc(doc(db,'artifacts',appId,'public','data','trucks',modals.delete.id));
-      showNotif("Unidad eliminada"); setModals(p=>({...p,delete:null}));
+      showNotif("Unidad eliminada"); setModals(p => ({...p,delete:null}));
     } catch { showNotif("Error al eliminar","error"); }
   };
 
-  const handleLogin = async (e) => {
-    e.preventDefault(); const fd=new FormData(e.target);
-    try { await signInWithEmailAndPassword(auth,fd.get('email'),fd.get('password')); showNotif("¡Bienvenido!"); }
-    catch(err) { showNotif(err.message||"Credenciales incorrectas","error"); }
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    try { await signInWithEmailAndPassword(auth, fd.get('email') as string, fd.get('password') as string); showNotif("¡Bienvenido!"); }
+    catch(err:any) { showNotif(err.message||"Credenciales incorrectas","error"); }
   };
 
-  const handleCreateUser = async (e) => {
-    e.preventDefault(); const fd=new FormData(e.target);
+  const handleCreateUser = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
     try {
-      const uc=await createUserWithEmailAndPassword(auth,fd.get('email'),fd.get('password'));
+      const uc = await createUserWithEmailAndPassword(auth, fd.get('email') as string, fd.get('password') as string);
       await addDoc(collection(db,'artifacts',appId,'public','data','users'),{uid:uc.user.uid,email:fd.get('email'),role:fd.get('role'),createdAt:Date.now(),createdBy:user.email});
-      showNotif("Usuario creado"); setModals(p=>({...p,addUser:false})); e.target.reset();
-    } catch(err) { showNotif(err.message||"Error","error"); }
+      showNotif("Usuario creado"); setModals(p => ({...p,addUser:false})); (e.currentTarget as HTMLFormElement).reset();
+    } catch(err:any) { showNotif(err.message||"Error","error"); }
   };
 
-  const handleCreateCliente = async (e) => {
-    e.preventDefault(); const fd=new FormData(e.target);
+  const handleCreateCliente = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
     try {
-      const ref=await addDoc(collection(db,'artifacts',appId,'public','data','clientes'),{nombre:fd.get('nombre'),email:fd.get('email'),telefono:fd.get('telefono'),createdAt:Date.now(),createdBy:user.email,estado:'activo'});
-      setSelectedClient(ref.id); showNotif("Cliente creado"); setModals(p=>({...p,addCliente:false})); e.target.reset();
-    } catch(err) { showNotif(err.message||"Error","error"); }
+      const ref = await addDoc(collection(db,'artifacts',appId,'public','data','clientes'),{nombre:fd.get('nombre'),email:fd.get('email'),telefono:fd.get('telefono'),createdAt:Date.now(),createdBy:user.email,estado:'activo'});
+      setSelectedClient(ref.id); showNotif("Cliente creado"); setModals(p => ({...p,addCliente:false})); (e.currentTarget as HTMLFormElement).reset();
+    } catch(err:any) { showNotif(err.message||"Error","error"); }
   };
 
   const handleExportExcel = async () => {
     try {
-      const XLSX=(await import('xlsx')).default||(await import('xlsx'));
-      const data=stats.activeHistory.map(h=>({Fecha:h.date,Unidad:h.truck,Concepto:h.categoryLabel,Monto:h.amount,Litros:h.litros||'',KM_Registro:h.km_registro||'',Precio_Litro:h.precio_por_litro||'',Responsable:h.responsible,UltimaEdicion:h.ultimaEdicion?`${h.ultimaEdicion.editadoPor} (${h.ultimaEdicion.fecha})`:''}));
-      const ws=XLSX.utils.json_to_sheet(data); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Gastos");
+      const XLSX = (await import('xlsx')).default || (await import('xlsx'));
+      const data = stats.activeHistory.map(h => ({
+        Fecha:h.date, Unidad:h.truck, Concepto:h.categoryLabel, Monto:h.amount,
+        Litros:h.litros||'', KM_Registro:h.km_registro||'', Precio_Litro:h.precio_por_litro||'',
+        Responsable:h.responsible,
+        UltimaEdicion:h.ultimaEdicion?`${h.ultimaEdicion.editadoPor} (${h.ultimaEdicion.fecha})`:'',
+      }));
+      const ws = XLSX.utils.json_to_sheet(data), wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,ws,"Gastos");
       XLSX.writeFile(wb,`distribuidora-veracruz-${new Date().toISOString().split('T')[0]}.xlsx`);
       showNotif("Excel exportado");
     } catch { showNotif("Error al exportar","error"); }
@@ -546,18 +586,29 @@ export default function App() {
     } catch { showNotif("Error en respaldo","error"); }
   };
 
-  const fmt   = (val) => new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(val||0);
-  const fmtN  = (val,dec=2) => Number(val||0).toFixed(dec);
+  const fmt  = (val: number) => new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(val||0);
+  const fmtN = (val: number, dec=2) => Number(val||0).toFixed(dec);
 
-  // ── Guards ───────────────────────────────────────────────────────────────────
+  // ── Guards ────────────────────────────────────────────────────────────────────
   if (authLoading) return (<><style>{globalStyles}</style><LoadingScreen /></>);
   if (showLogin)   return (<><style>{globalStyles}</style><LoginComponent onLogin={handleLogin} /></>);
 
+  // Driver view — simplified mobile interface
+  if (userRole === ROLES.DRIVER) {
+    return (
+      <>
+        <style>{globalStyles}</style>
+        <Notification banner={notif} />
+        <DriverView trucks={trucks} userEmail={user.email} onSubmit={handleAddExpense} onSignOut={() => signOut(auth)} />
+      </>
+    );
+  }
+
   const TABS = [
-    {id:'dashboard', label:'Panel'},
-    {id:'units',     label:'Flota'},
-    {id:'history',   label:'Gastos'},
-    {id:'efficiency',label:'Eficiencia'},
+    {id:'dashboard',  label:'Panel'},
+    {id:'units',      label:'Flota'},
+    {id:'history',    label:'Gastos'},
+    {id:'efficiency', label:'Eficiencia'},
   ];
 
   return (
@@ -567,7 +618,7 @@ export default function App() {
         <Notification banner={notif} />
         {dbError && <div className="max-w-7xl mx-auto px-4 mt-3"><div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-700 text-sm font-semibold">{dbError}</div></div>}
 
-        {/* ── NAV ── */}
+        {/* NAV */}
         <nav className="nav-shell sticky top-0 z-50 px-4 md:px-6 py-3 flex flex-wrap justify-between items-center gap-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white float"
@@ -583,10 +634,16 @@ export default function App() {
           </div>
 
           <div className="flex bg-slate-100 p-1 rounded-2xl order-last md:order-none w-full md:w-auto justify-center gap-0.5">
-            {TABS.map(tab=>(
-              <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
+            {TABS.map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                 className={`tab-pill px-4 py-2 rounded-xl flex-1 md:flex-none ${activeTab===tab.id?'active':''}`}>
                 {tab.label}
+                {tab.id==='dashboard' && fleetAlerts.filter(a=>a.severity==='critical').length>0 && (
+                  <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-[7px] font-black text-white"
+                    style={{background:'var(--danger)'}}>
+                    {fleetAlerts.filter(a=>a.severity==='critical').length}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -595,15 +652,13 @@ export default function App() {
             <button onClick={handleExportExcel} className="px-3 py-2 rounded-xl text-[10px] font-bold border transition-all"
               style={{color:'var(--success)',borderColor:'#bbf7d0',background:'#f0fdf4'}}>XLS</button>
             {userRole===ROLES.ADMIN && (
-              <button onClick={()=>setModals(m=>({...m,users:true}))} className="p-2 rounded-xl transition-all hover:bg-blue-50"
-                style={{color:'var(--oxford)'}}><Users size={15}/></button>
+              <button onClick={() => setModals(m => ({...m,users:true}))} className="p-2 rounded-xl transition-all hover:bg-blue-50" style={{color:'var(--oxford)'}}><Users size={15}/></button>
             )}
             {userRole===ROLES.ADMIN && (
-              <button onClick={()=>setModals(m=>({...m,clientes:true}))} className="p-2 rounded-xl transition-all hover:bg-cyan-50"
-                style={{color:'var(--oxford)'}}><Building size={15}/></button>
+              <button onClick={() => setModals(m => ({...m,clientes:true}))} className="p-2 rounded-xl transition-all hover:bg-cyan-50" style={{color:'var(--oxford)'}}><Building size={15}/></button>
             )}
             <button onClick={handleBackup} className="p-2 rounded-xl transition-all hover:bg-violet-50" style={{color:'var(--oxford)'}}><Clock size={15}/></button>
-            <button onClick={()=>signOut(auth)} className="p-2 rounded-xl transition-all hover:bg-red-50" style={{color:'var(--oxford)'}}><LogOut size={15}/></button>
+            <button onClick={() => signOut(auth)} className="p-2 rounded-xl transition-all hover:bg-red-50" style={{color:'var(--oxford)'}}><LogOut size={15}/></button>
           </div>
         </nav>
 
@@ -616,10 +671,10 @@ export default function App() {
                 <Building size={14} style={{color:'var(--accent)'}} className="shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{color:'var(--accent)'}}>Cliente Activo</p>
-                  <select value={selectedClient||''} onChange={e=>setSelectedClient(e.target.value)}
+                  <select value={selectedClient||''} onChange={e => setSelectedClient(e.target.value)}
                     className="bg-white border rounded-xl text-sm font-semibold p-1.5 w-full focus:outline-none"
                     style={{borderColor:'rgba(37,99,235,.2)',color:'var(--navy)'}}>
-                    {clientes.map(c=><option key={c.id} value={c.id}>{c.nombre}</option>)}
+                    {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                   </select>
                 </div>
               </div>
@@ -635,64 +690,41 @@ export default function App() {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={13} style={{color:'var(--mist)'}} />
                   <input type="text" placeholder="Patente o chofer..."
                     className="inp pl-8 pr-3 py-2.5 text-xs w-full"
-                    value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} />
+                    value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 </div>
               </div>
               <div>
                 <label className="text-[8px] font-bold uppercase tracking-wider mb-1 block" style={{color:'var(--oxford)'}}>Período</label>
                 <div className="inp flex items-center gap-2 px-3 py-2">
-                  <input type="date" value={dateRange.start} onChange={e=>setDateRange(p=>({...p,start:e.target.value}))} className="bg-transparent text-[10px] outline-none" style={{color:'var(--navy)'}} />
+                  <input type="date" value={dateRange.start} onChange={e => setDateRange(p => ({...p,start:e.target.value}))} className="bg-transparent text-[10px] outline-none" style={{color:'var(--navy)'}} />
                   <span style={{color:'var(--mist)'}}>—</span>
-                  <input type="date" value={dateRange.end}   onChange={e=>setDateRange(p=>({...p,end:e.target.value}))}   className="bg-transparent text-[10px] outline-none" style={{color:'var(--navy)'}} />
+                  <input type="date" value={dateRange.end}   onChange={e => setDateRange(p => ({...p,end:e.target.value}))}   className="bg-transparent text-[10px] outline-none" style={{color:'var(--navy)'}} />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Alertas vencimientos */}
-          {stats.alertas.length>0 && (
-            <div className="alert-strip p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <AlertTriangle size={14} style={{color:'var(--warn)'}} />
-                <p className="text-[9px] font-bold uppercase tracking-widest" style={{color:'var(--warn)'}}>Alertas de Vencimiento</p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {stats.alertas.map((a,i)=>(
-                  <div key={i} className="bg-white rounded-xl border border-amber-200 p-3 flex items-center gap-3 shadow-sm">
-                    <div className="w-7 h-7 bg-amber-100 rounded-lg flex items-center justify-center shrink-0">
-                      <Truck size={12} style={{color:'var(--warn)'}} />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-bold text-xs uppercase" style={{color:'var(--navy)'}}>{a.patente} <span className="font-normal" style={{color:'var(--oxford)'}}>— {a.chofer}</span></p>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {a.alertaSeguro&&<span className={`text-[7px] font-bold uppercase px-1.5 py-0.5 rounded-full ${a.alertaSeguro==='vencido'?'badge-bad':'badge-warn'}`}>Seguro {a.alertaSeguro==='vencido'?'VENCIDO':`vence ${a.seguro_venc}`}</span>}
-                        {a.alertaVtv   &&<span className={`text-[7px] font-bold uppercase px-1.5 py-0.5 rounded-full ${a.alertaVtv==='vencido'?'badge-bad':'badge-warn'}`}>VTV {a.alertaVtv==='vencido'?'VENCIDO':`vence ${a.vtv_venc}`}</span>}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Alert Panel — replaces the old alert strip */}
+          <AlertPanel alerts={fleetAlerts} />
 
-          {/* ── TABS ── */}
+          {/* TABS */}
           {activeTab==='dashboard'  && <DashboardPanel  stats={stats}  trucks={trucks} fmt={fmt} />}
           {activeTab==='units'      && <FlotaPanel      stats={stats}  setModals={setModals} />}
-          {activeTab==='history'    && <HistoryTable    allPeriod={stats.allPeriod} trucks={trucks} truckFilter={historyTruckFilter} onTruckFilter={setHistoryTruckFilter} onBaja={handleBajaExpense} onEdit={item=>setModals(m=>({...m,editExpense:item}))} fmt={fmt} />}
+          {activeTab==='history'    && <HistoryTable    allPeriod={stats.allPeriod} trucks={trucks} truckFilter={historyTruckFilter} onTruckFilter={setHistoryTruckFilter} onBaja={handleBajaExpense} onEdit={item => setModals(m => ({...m,editExpense:item}))} fmt={fmt} onExport={handleExportExcel} />}
           {activeTab==='efficiency' && <EfficiencyPanel effStats={efficiencyStats} trucks={trucks} fmt={fmt} fmtN={fmtN} />}
         </main>
 
         {/* FAB */}
-        <button onClick={()=>setModals(m=>({...m,expense:true}))}
+        <button onClick={() => setModals(m => ({...m,expense:true}))}
           className="fab fixed bottom-6 right-6 z-40 w-14 h-14 text-white rounded-full flex items-center justify-center">
           <Plus size={22} />
         </button>
 
-        {/* ── MODALS ── */}
-        {modals.truck     && <TruckFormModal title="Alta de Unidad"   onSubmit={handleAddTruck}                                   onClose={()=>setModals(p=>({...p,truck:false}))} />}
-        {modals.editTruck && <TruckFormModal title="Editar Unidad"    initial={modals.editTruck} onSubmit={e=>handleEditTruck(e,modals.editTruck.id)} onClose={()=>setModals(p=>({...p,editTruck:null}))} />}
-        {modals.expense   && <ExpenseModal   trucks={trucks}          onSubmit={handleAddExpense} history={history}              onClose={()=>setModals(m=>({...m,expense:false}))} />}
-        {modals.editExpense&&<EditExpenseModal item={modals.editExpense} fmt={fmt} onSave={handleEditExpense}                    onClose={()=>setModals(m=>({...m,editExpense:null}))} />}
+        {/* MODALS */}
+        {modals.truck      && <AltaUnidadModal onSubmit={handleAddTruck} onClose={() => setModals(p => ({...p,truck:false}))} />}
+        {modals.editTruck  && <AltaUnidadModal initial={modals.editTruck} onSubmit={data => handleEditTruck(data,modals.editTruck.id)} onClose={() => setModals(p => ({...p,editTruck:null}))} />}
+        {modals.expense    && <ExpenseModal trucks={trucks} onSubmit={handleAddExpense} history={history} onClose={() => setModals(m => ({...m,expense:false}))} />}
+        {modals.editExpense && <EditExpenseModal item={modals.editExpense} fmt={fmt} onSave={handleEditExpense} onClose={() => setModals(m => ({...m,editExpense:null}))} />}
 
         {modals.delete && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 overlay">
@@ -701,7 +733,7 @@ export default function App() {
               <h3 className="font-display font-black uppercase text-xl mb-1" style={{color:'var(--navy)'}}>¿Eliminar Unidad?</h3>
               <p className="text-sm mb-6" style={{color:'var(--oxford)'}}>Camión <span className="font-bold" style={{color:'var(--navy)'}}>{modals.delete.patente}</span></p>
               <div className="flex gap-3">
-                <button onClick={()=>setModals(m=>({...m,delete:null}))} className="flex-1 p-3 rounded-xl font-bold text-xs uppercase transition-all hover:bg-slate-100" style={{background:'var(--ice)',color:'var(--oxford)'}}>Cancelar</button>
+                <button onClick={() => setModals(m => ({...m,delete:null}))} className="flex-1 p-3 rounded-xl font-bold text-xs uppercase transition-all hover:bg-slate-100" style={{background:'var(--ice)',color:'var(--oxford)'}}>Cancelar</button>
                 <button onClick={handleDeleteTruck} className="flex-1 p-3 text-white rounded-xl font-bold text-xs uppercase" style={{background:'var(--danger)'}}>Eliminar</button>
               </div>
             </div>
@@ -713,11 +745,11 @@ export default function App() {
             <div className="modal w-full max-w-lg p-7 max-h-[80vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-5">
                 <h2 className="font-display font-black text-xl uppercase flex items-center gap-2" style={{color:'var(--navy)'}}><Shield size={18}/> Usuarios</h2>
-                <button onClick={()=>setModals(m=>({...m,users:false}))} style={{color:'var(--mist)'}}>✕</button>
+                <button onClick={() => setModals(m => ({...m,users:false}))} style={{color:'var(--mist)'}}>✕</button>
               </div>
-              <button onClick={()=>setModals(m=>({...m,addUser:true}))} className="mb-4 w-full text-white px-4 py-3 rounded-xl text-sm font-bold uppercase" style={{background:'var(--navy)'}}>+ Crear Usuario</button>
+              <button onClick={() => setModals(m => ({...m,addUser:true}))} className="mb-4 w-full text-white px-4 py-3 rounded-xl text-sm font-bold uppercase" style={{background:'var(--navy)'}}>+ Crear Usuario</button>
               <div className="space-y-2">
-                {users.map(u=>(
+                {users.map(u => (
                   <div key={u.id} className="p-3 rounded-xl border flex justify-between items-center" style={{background:'var(--ice)',borderColor:'var(--mist)'}}>
                     <div><p className="font-semibold text-sm" style={{color:'var(--navy)'}}>{u.email}</p><p className="text-[8px] uppercase font-bold" style={{color:'var(--oxford)'}}>{u.role}</p></div>
                     <span className={`px-2 py-1 rounded-lg text-[8px] font-bold uppercase ${u.role===ROLES.ADMIN?'badge-bad':'badge-good'}`}>{u.role}</span>
@@ -735,9 +767,13 @@ export default function App() {
               <form onSubmit={handleCreateUser} className="space-y-4">
                 <input name="email" type="email" placeholder="Email" required className="inp w-full p-3.5" />
                 <input name="password" type="password" placeholder="Contraseña" required className="inp w-full p-3.5" />
-                <select name="role" className="inp w-full p-3.5"><option value={ROLES.USER}>Usuario Normal</option><option value={ROLES.ADMIN}>Administrador</option></select>
+                <select name="role" className="inp w-full p-3.5">
+                  <option value={ROLES.USER}>Usuario Normal</option>
+                  <option value={ROLES.ADMIN}>Administrador</option>
+                  <option value={ROLES.DRIVER}>Chofer (vista móvil)</option>
+                </select>
                 <div className="flex gap-3">
-                  <button type="button" onClick={()=>setModals(m=>({...m,addUser:false}))} className="flex-1 p-3 rounded-xl font-bold text-xs uppercase" style={{background:'var(--ice)',color:'var(--oxford)'}}>Cancelar</button>
+                  <button type="button" onClick={() => setModals(m => ({...m,addUser:false}))} className="flex-1 p-3 rounded-xl font-bold text-xs uppercase" style={{background:'var(--ice)',color:'var(--oxford)'}}>Cancelar</button>
                   <button type="submit" className="flex-1 p-3 text-white rounded-xl font-bold text-xs uppercase" style={{background:'var(--navy)'}}>Crear</button>
                 </div>
               </form>
@@ -750,11 +786,11 @@ export default function App() {
             <div className="modal w-full max-w-lg p-7 max-h-[80vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-5">
                 <h2 className="font-display font-black text-xl uppercase flex items-center gap-2" style={{color:'var(--navy)'}}><Building size={18}/> Clientes</h2>
-                <button onClick={()=>setModals(m=>({...m,clientes:false}))} style={{color:'var(--mist)'}}>✕</button>
+                <button onClick={() => setModals(m => ({...m,clientes:false}))} style={{color:'var(--mist)'}}>✕</button>
               </div>
-              <button onClick={()=>setModals(m=>({...m,addCliente:true}))} className="mb-4 w-full text-white px-4 py-3 rounded-xl text-sm font-bold uppercase" style={{background:'var(--accent)'}}>+ Crear Cliente</button>
+              <button onClick={() => setModals(m => ({...m,addCliente:true}))} className="mb-4 w-full text-white px-4 py-3 rounded-xl text-sm font-bold uppercase" style={{background:'var(--accent)'}}>+ Crear Cliente</button>
               <div className="space-y-2">
-                {clientes.map(c=>(
+                {clientes.map(c => (
                   <div key={c.id} className="p-3 rounded-xl border flex justify-between items-center" style={{background:'#eff6ff',borderColor:'#bfdbfe'}}>
                     <div><p className="font-semibold text-sm" style={{color:'var(--navy)'}}>{c.nombre}</p><p className="text-[8px] font-bold" style={{color:'var(--accent)'}}>{c.email}</p></div>
                     <span className={`px-2 py-1 rounded-lg text-[8px] font-bold uppercase ${c.estado==='activo'?'badge-good':'badge-bad'}`}>{c.estado}</span>
@@ -774,7 +810,7 @@ export default function App() {
                 <input name="email" type="email" placeholder="Email" required className="inp w-full p-3.5" />
                 <input name="telefono" placeholder="Teléfono (opcional)" className="inp w-full p-3.5" />
                 <div className="flex gap-3">
-                  <button type="button" onClick={()=>setModals(m=>({...m,addCliente:false}))} className="flex-1 p-3 rounded-xl font-bold text-xs uppercase" style={{background:'var(--ice)',color:'var(--oxford)'}}>Cancelar</button>
+                  <button type="button" onClick={() => setModals(m => ({...m,addCliente:false}))} className="flex-1 p-3 rounded-xl font-bold text-xs uppercase" style={{background:'var(--ice)',color:'var(--oxford)'}}>Cancelar</button>
                   <button type="submit" className="flex-1 p-3 text-white rounded-xl font-bold text-xs uppercase" style={{background:'var(--accent)'}}>Crear</button>
                 </div>
               </form>
@@ -786,44 +822,132 @@ export default function App() {
   );
 }
 
+// ─── ALERT PANEL ──────────────────────────────────────────────────────────────
+
+function AlertPanel({ alerts }: { alerts: any[] }) {
+  if (alerts.length === 0) {
+    return (
+      <div className="rounded-2xl border p-4 flex items-center gap-3" style={{background:'#f0fdf4',borderColor:'#bbf7d0'}}>
+        <div className="w-9 h-9 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
+          <ShieldCheck size={16} style={{color:'var(--success)'}} />
+        </div>
+        <div>
+          <p className="font-display font-black text-sm uppercase" style={{color:'var(--success)'}}>Flota al día</p>
+          <p className="text-[9px]" style={{color:'var(--oxford)'}}>Sin alertas activas en este momento</p>
+        </div>
+      </div>
+    );
+  }
+
+  const criticals = alerts.filter(a => a.severity==='critical');
+  const warnings  = alerts.filter(a => a.severity==='warning');
+
+  const ALERT_ICON: Record<string, React.ElementType> = {
+    seguro_vencido: ShieldAlert, seguro_proximo: ShieldAlert,
+    vtv_vencido: AlertTriangle, vtv_proximo: AlertTriangle,
+    service_proximo: Wrench, service_vencido: Wrench,
+    rendimiento_bajo: Fuel,
+  };
+  const ALERT_CAT: Record<string,string> = {
+    seguro_vencido:'Seguro', seguro_proximo:'Seguro',
+    vtv_vencido:'VTV', vtv_proximo:'VTV',
+    service_proximo:'Service', service_vencido:'Service',
+    rendimiento_bajo:'Combustible',
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <AlertTriangle size={14} style={{color:'var(--danger)'}} />
+        <p className="text-[9px] font-bold uppercase tracking-widest" style={{color:'var(--danger)'}}>
+          {alerts.length} alerta{alerts.length!==1?'s':''} activa{alerts.length!==1?'s':''}
+          {criticals.length>0 && (
+            <span className="ml-2 px-1.5 py-0.5 rounded-full text-white font-bold text-[7px]" style={{background:'var(--danger)'}}>
+              {criticals.length} CRÍTICA{criticals.length!==1?'S':''}
+            </span>
+          )}
+        </p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+        {alerts.map(alert => {
+          const isCrit = alert.severity==='critical';
+          const Icon   = ALERT_ICON[alert.type] || AlertTriangle;
+          return (
+            <div key={alert.key} className="rounded-2xl border p-3 flex items-start gap-3"
+              style={{background:isCrit?'#fff1f2':'#fffbeb',borderColor:isCrit?'#fca5a5':'#fcd34d',
+                boxShadow:isCrit?'0 2px 12px rgba(220,38,38,.1)':'none'}}>
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+                style={{background:isCrit?'#fee2e2':'#fef3c7'}}>
+                <Icon size={14} style={{color:isCrit?'var(--danger)':'var(--warn)'}} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1 mb-0.5">
+                  <span className="text-[7px] font-black uppercase px-1.5 py-0.5 rounded-full"
+                    style={{background:isCrit?'#fee2e2':'#fef9c3',color:isCrit?'var(--danger)':'#a16207'}}>
+                    {isCrit?'CRÍTICO':'AVISO'}
+                  </span>
+                  <span className="text-[7px] font-bold uppercase" style={{color:'var(--oxford)'}}>{ALERT_CAT[alert.type]||'Alerta'}</span>
+                </div>
+                <p className="font-display font-black text-xs uppercase leading-tight" style={{color:'var(--navy)'}}>
+                  {alert.patente}{alert.chofer&&<span className="font-sans font-normal normal-case ml-1" style={{color:'var(--oxford)'}}>— {alert.chofer}</span>}
+                </p>
+                <p className="text-[9px] mt-0.5 font-medium leading-snug" style={{color:'var(--steel)'}}>{alert.message}</p>
+                {alert.daysRemaining!==undefined && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <Clock size={9} style={{color:isCrit?'var(--danger)':'var(--warn)'}} />
+                    <span className="text-[8px] font-bold" style={{color:isCrit?'var(--danger)':'var(--warn)'}}>
+                      {alert.daysRemaining<0?`Expiró el ${alert.rawValue}`:`Vence: ${alert.rawValue}`}
+                    </span>
+                  </div>
+                )}
+                {alert.kmRemaining!==undefined && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <Gauge size={9} style={{color:isCrit?'var(--danger)':'var(--warn)'}} />
+                    <span className="text-[8px] font-bold" style={{color:isCrit?'var(--danger)':'var(--warn)'}}>
+                      Service: {Number(alert.rawValue).toLocaleString('es-AR')} km
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── DASHBOARD PANEL ──────────────────────────────────────────────────────────
-function DashboardPanel({stats,trucks,fmt}) {
-  const combustiblePct   = stats.grandTotal>0?((stats.pieData.find(d=>d.name==='Combustible')?.value||0)/stats.grandTotal*100).toFixed(1):0;
-  const mantenimientoPct = stats.grandTotal>0?((stats.pieData.find(d=>d.name==='Mantenimiento')?.value||0)/stats.grandTotal*100).toFixed(1):0;
-  const fixTotal         = stats.truckStats.reduce((a,t)=>a+t.fixTotal,0);
+
+function DashboardPanel({stats,trucks,fmt}: any) {
+  const combustiblePct   = stats.grandTotal>0?((stats.pieData.find((d:any)=>d.name==='Combustible')?.value||0)/stats.grandTotal*100).toFixed(1):0;
+  const mantenimientoPct = stats.grandTotal>0?((stats.pieData.find((d:any)=>d.name==='Mantenimiento')?.value||0)/stats.grandTotal*100).toFixed(1):0;
+  const fixTotal         = stats.truckStats.reduce((a:number,t:any)=>a+t.fixTotal,0);
 
   return (
     <div className="space-y-5">
-
-      {/* KPI Hero row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Primary KPI */}
         <div className="col-span-2 lg:col-span-1 kpi-hero p-6 flex flex-col justify-between" style={{minHeight:148}}>
           <div className="relative flex items-center justify-between mb-4">
-            <div className="p-2 rounded-xl" style={{background:'rgba(37,99,235,.25)'}}>
-              <DollarSign size={14} style={{color:'#93c5fd'}} />
-            </div>
-            <span className="text-[7px] font-bold uppercase tracking-widest px-2 py-1 rounded-full"
-              style={{color:'#93c5fd',background:'rgba(37,99,235,.2)'}}>Período</span>
+            <div className="p-2 rounded-xl" style={{background:'rgba(37,99,235,.25)'}}><DollarSign size={14} style={{color:'#93c5fd'}} /></div>
+            <span className="text-[7px] font-bold uppercase tracking-widest px-2 py-1 rounded-full" style={{color:'#93c5fd',background:'rgba(37,99,235,.2)'}}>Período</span>
           </div>
           <div className="relative">
             <p className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{color:'rgba(255,255,255,.4)'}}>Total Egresos</p>
             <p className="font-data text-3xl text-white leading-none">{fmt(stats.grandTotal)}</p>
           </div>
         </div>
-
-        <SubKpi label="Unidades Activas"    value={trucks.length}  Icon={Truck}     accent="#2563eb" bg="#eff6ff" border="#bfdbfe" suffix="activas" />
-        <SubKpi label="Operaciones"          value={stats.totalExpenses} Icon={RotateCcw} accent="#d97706" bg="#fffbeb" border="#fde68a" suffix="registros" />
-        <SubKpi label="Promedio por Unidad"  value={fmt(stats.grandTotal/(trucks.length||1))} Icon={TrendingUp} accent="#7c3aed" bg="#f5f3ff" border="#ddd6fe" mono />
+        <SubKpi label="Unidades Activas"    value={trucks.length}  Icon={Truck}      accent="#2563eb" bg="#eff6ff" border="#bfdbfe" suffix="activas" />
+        <SubKpi label="Operaciones"         value={stats.totalExpenses} Icon={RotateCcw} accent="#d97706" bg="#fffbeb" border="#fde68a" suffix="registros" />
+        <SubKpi label="Promedio por Unidad" value={fmt(stats.grandTotal/(trucks.length||1))} Icon={TrendingUp} accent="#7c3aed" bg="#f5f3ff" border="#ddd6fe" mono />
       </div>
 
-      {/* Distribución rápida */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          {label:'Combustible',   emoji:'⛽', pct:combustiblePct,   val:stats.pieData.find(d=>d.name==='Combustible')?.value||0,   color:'#0ea5e9', bg:'#f0f9ff', border:'#bae6fd', barColor:'linear-gradient(90deg,#38bdf8,#0ea5e9)'},
-          {label:'Mantenimiento', emoji:'🔧', pct:mantenimientoPct, val:stats.pieData.find(d=>d.name==='Mantenimiento')?.value||0, color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe', barColor:'linear-gradient(90deg,#60a5fa,#2563eb)'},
-          {label:'Costos Fijos',  emoji:'🛡', pct:stats.grandTotal>0?(fixTotal/stats.grandTotal*100).toFixed(1):0, val:fixTotal, color:'#16a34a', bg:'#f0fdf4', border:'#bbf7d0', barColor:'linear-gradient(90deg,#4ade80,#16a34a)'},
-        ].map(item=>(
+          {label:'Combustible',   emoji:'⛽', pct:combustiblePct,   val:stats.pieData.find((d:any)=>d.name==='Combustible')?.value||0,   color:'#0ea5e9', bg:'#f0f9ff', border:'#bae6fd', barColor:'linear-gradient(90deg,#38bdf8,#0ea5e9)'},
+          {label:'Mantenimiento', emoji:'🔧', pct:mantenimientoPct, val:stats.pieData.find((d:any)=>d.name==='Mantenimiento')?.value||0, color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe', barColor:'linear-gradient(90deg,#60a5fa,#2563eb)'},
+          {label:'Costos Fijos',  emoji:'🛡', pct:stats.grandTotal>0?(fixTotal/stats.grandTotal*100).toFixed(1):0, val:fixTotal,         color:'#16a34a', bg:'#f0fdf4', border:'#bbf7d0', barColor:'linear-gradient(90deg,#4ade80,#16a34a)'},
+        ].map(item => (
           <div key={item.label} className="rounded-2xl p-5 border" style={{background:item.bg,borderColor:item.border}}>
             <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-8 rounded-xl flex items-center justify-center text-sm" style={{background:item.color}}>{item.emoji}</div>
@@ -840,7 +964,6 @@ function DashboardPanel({stats,trucks,fmt}) {
         ))}
       </div>
 
-      {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
         <div className="lg:col-span-3 card p-6">
           <div className="flex items-start justify-between mb-5">
@@ -849,11 +972,8 @@ function DashboardPanel({stats,trucks,fmt}) {
               <p className="text-[10px] mt-0.5" style={{color:'var(--oxford)'}}>Fijos + Variables del período</p>
             </div>
             <div className="flex gap-3">
-              {[['#2563eb','Fijos'],['#f97316','Variables']].map(([c,l])=>(
-                <div key={l} className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-sm" style={{background:c}}/>
-                  <span className="text-[9px] font-bold uppercase" style={{color:'var(--oxford)'}}>{l}</span>
-                </div>
+              {[['#2563eb','Fijos'],['#f97316','Variables']].map(([c,l]) => (
+                <div key={l} className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm" style={{background:c}}/><span className="text-[9px] font-bold uppercase" style={{color:'var(--oxford)'}}>{l}</span></div>
               ))}
             </div>
           </div>
@@ -862,7 +982,7 @@ function DashboardPanel({stats,trucks,fmt}) {
               <BarChart data={stats.truckStats} barSize={32}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="patente" axisLine={false} tickLine={false} tick={{fontSize:10,fontWeight:'700',fill:'#64748b',fontFamily:'Barlow Condensed'}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} tickFormatter={v=>`$${(v/1000).toFixed(0)}k`} />
+                <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} tickFormatter={(v:number) => `$${(v/1000).toFixed(0)}k`} />
                 <Tooltip content={<BarTooltip fmt={fmt}/>} />
                 <Bar dataKey="fixTotal" stackId="a" fill="#2563eb" name="Fijos" />
                 <Bar dataKey="varTotal" stackId="a" fill="#f97316" radius={[5,5,0,0]} name="Variables" />
@@ -870,7 +990,6 @@ function DashboardPanel({stats,trucks,fmt}) {
             </ResponsiveContainer>
           </div>
         </div>
-
         <div className="lg:col-span-2 card p-6 flex flex-col">
           <div className="mb-4">
             <h3 className="font-display font-black text-base uppercase tracking-tight" style={{color:'var(--navy)'}}>Distribución</h3>
@@ -883,18 +1002,15 @@ function DashboardPanel({stats,trucks,fmt}) {
                   <Pie data={stats.pieData} innerRadius={50} outerRadius={68} paddingAngle={4} dataKey="value" strokeWidth={0}>
                     <Cell fill="#f97316"/><Cell fill="#2563eb"/>
                   </Pie>
-                  <Tooltip formatter={v=>fmt(v)} />
+                  <Tooltip formatter={(v:number) => fmt(v)} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
           </div>
           <div className="space-y-2">
-            {[{label:'Combustible',val:stats.pieData.find(d=>d.name==='Combustible')?.value||0,color:'#f97316',bg:'#fff7ed'},{label:'Mantenimiento',val:stats.pieData.find(d=>d.name==='Mantenimiento')?.value||0,color:'#2563eb',bg:'#eff6ff'}].map(item=>(
+            {[{label:'Combustible',val:stats.pieData.find((d:any)=>d.name==='Combustible')?.value||0,color:'#f97316',bg:'#fff7ed'},{label:'Mantenimiento',val:stats.pieData.find((d:any)=>d.name==='Mantenimiento')?.value||0,color:'#2563eb',bg:'#eff6ff'}].map(item => (
               <div key={item.label} className="flex items-center justify-between rounded-xl px-3 py-2" style={{background:item.bg}}>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full" style={{background:item.color}}/>
-                  <span className="text-[9px] font-bold uppercase" style={{color:item.color}}>{item.label}</span>
-                </div>
+                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{background:item.color}}/><span className="text-[9px] font-bold uppercase" style={{color:item.color}}>{item.label}</span></div>
                 <span className="font-mono text-[10px] font-bold" style={{color:'var(--navy)'}}>{fmt(item.val)}</span>
               </div>
             ))}
@@ -902,7 +1018,6 @@ function DashboardPanel({stats,trucks,fmt}) {
         </div>
       </div>
 
-      {/* Tendencia */}
       {stats.trendData.length>1 && (
         <div className="card p-6">
           <div className="flex items-start justify-between mb-5">
@@ -910,19 +1025,14 @@ function DashboardPanel({stats,trucks,fmt}) {
               <h3 className="font-display font-black text-base uppercase tracking-tight" style={{color:'var(--navy)'}}>Tendencia Mensual</h3>
               <p className="text-[10px] mt-0.5" style={{color:'var(--oxford)'}}>Evolución de costos — últimos 6 meses</p>
             </div>
-            <div className="flex gap-4">
-              {[['#f97316','Combustible'],['#2563eb','Mantenimiento']].map(([c,l])=>(
-                <div key={l} className="flex items-center gap-1.5"><div className="w-6 h-0.5 rounded-full" style={{background:c}}/><span className="text-[9px] font-bold uppercase" style={{color:'var(--oxford)'}}>{l}</span></div>
-              ))}
-            </div>
           </div>
           <div className="h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={stats.trendData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
                 <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{fontSize:10,fontWeight:'600',fill:'#94a3b8'}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} tickFormatter={v=>`$${(v/1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{background:'var(--navy)',border:'none',borderRadius:10,color:'white',fontSize:11}} formatter={v=>[fmt(v)]} />
+                <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} tickFormatter={(v:number) => `$${(v/1000).toFixed(0)}k`} />
+                <Tooltip contentStyle={{background:'var(--navy)',border:'none',borderRadius:10,color:'white',fontSize:11}} formatter={(v:number) => [fmt(v)]} />
                 <Line type="monotone" dataKey="combustible"   stroke="#f97316" strokeWidth={2.5} dot={{fill:'#f97316',r:4,strokeWidth:2,stroke:'white'}} name="Combustible" />
                 <Line type="monotone" dataKey="mantenimiento" stroke="#2563eb" strokeWidth={2.5} dot={{fill:'#2563eb',r:4,strokeWidth:2,stroke:'white'}} name="Mantenimiento" />
               </LineChart>
@@ -931,26 +1041,20 @@ function DashboardPanel({stats,trucks,fmt}) {
         </div>
       )}
 
-      {/* Ranking */}
       {stats.ranking.length>0 && (
         <div className="card p-6">
           <div className="mb-5">
             <h3 className="font-display font-black text-base uppercase tracking-tight" style={{color:'var(--navy)'}}>Ranking de Unidades</h3>
             <p className="text-[10px] mt-0.5" style={{color:'var(--oxford)'}}>Mayor egreso en el período</p>
           </div>
-          <div className="hidden sm:grid grid-cols-12 gap-2 px-3 mb-2">
-            {['#','Unidad','Distribución','Total','% Flota'].map((h,i)=>(
-              <span key={h} className={`text-[8px] font-bold uppercase ${i===3?'col-span-2 text-right':i===4?'col-span-2 text-right':i===2?'col-span-4':i===1?'col-span-3':'col-span-1'}`} style={{color:'var(--oxford)'}}>{h}</span>
-            ))}
-          </div>
           <div className="space-y-2">
-            {stats.ranking.map((t,i)=>{
-              const pct=stats.grandTotal>0?(t.total/stats.grandTotal*100):0;
-              const fixPct=t.total>0?(t.fixTotal/t.total*100):0;
-              const varPct=t.total>0?(t.varTotal/t.total*100):0;
-              const medals=['🥇','🥈','🥉'];
+            {stats.ranking.map((t:any, i:number) => {
+              const pct    = stats.grandTotal>0?(t.total/stats.grandTotal*100):0;
+              const fixPct = t.total>0?(t.fixTotal/t.total*100):0;
+              const varPct = t.total>0?(t.varTotal/t.total*100):0;
+              const medals = ['🥇','🥈','🥉'];
               return (
-                <div key={t.id} className="grid grid-cols-12 gap-2 items-center px-3 py-3 rounded-xl transition-colors"
+                <div key={t.id} className="grid grid-cols-12 gap-2 items-center px-3 py-3 rounded-xl"
                   style={{background:i===0?'rgba(37,99,235,.04)':'transparent',border:i===0?'1px solid rgba(37,99,235,.1)':'1px solid transparent'}}>
                   <span className="col-span-1 text-base">{medals[i]||<span className="font-mono font-bold text-xs" style={{color:'var(--oxford)'}}>{i+1}</span>}</span>
                   <div className="col-span-3">
@@ -978,14 +1082,6 @@ function DashboardPanel({stats,trucks,fmt}) {
               );
             })}
           </div>
-          <div className="mt-4 pt-4 border-t grid grid-cols-3 gap-4" style={{borderColor:'var(--mist)'}}>
-            {[{label:'Total flota',val:fmt(stats.grandTotal),c:'var(--accent)'},{label:'Mayor egreso',val:fmt(stats.ranking[0]?.total||0),c:'#f97316'},{label:'Menor egreso',val:fmt(stats.ranking[stats.ranking.length-1]?.total||0),c:'var(--success)'}].map(item=>(
-              <div key={item.label} className="text-center">
-                <p className="text-[8px] font-bold uppercase tracking-wider" style={{color:'var(--oxford)'}}>{item.label}</p>
-                <p className="font-mono font-bold text-sm mt-0.5" style={{color:item.c}}>{item.val}</p>
-              </div>
-            ))}
-          </div>
         </div>
       )}
     </div>
@@ -993,10 +1089,10 @@ function DashboardPanel({stats,trucks,fmt}) {
 }
 
 // ─── EFFICIENCY PANEL ─────────────────────────────────────────────────────────
-function EfficiencyPanel({effStats,trucks,fmt,fmtN}) {
-  const {truckEfficiency,fleetAvgKmL,costPerKm,desvioAlerts,priceEvolution,totalKmFleet} = effStats;
 
-  const kmLBadge = (kmL) => {
+function EfficiencyPanel({effStats,trucks,fmt,fmtN}: any) {
+  const {truckEfficiency,fleetAvgKmL,costPerKm,desvioAlerts,priceEvolution} = effStats;
+  const kmLBadge = (kmL: number|null) => {
     if (kmL===null) return <span className="px-2 py-0.5 rounded-lg text-[8px] font-bold" style={{background:'var(--ice)',color:'var(--oxford)'}}>Sin datos</span>;
     if (kmL>=4) return <span className="badge-good px-2 py-0.5 rounded-lg text-[8px] font-bold">{fmtN(kmL,2)} km/l</span>;
     if (kmL>=3) return <span className="badge-warn px-2 py-0.5 rounded-lg text-[8px] font-bold">{fmtN(kmL,2)} km/l</span>;
@@ -1005,17 +1101,11 @@ function EfficiencyPanel({effStats,trucks,fmt,fmtN}) {
 
   return (
     <div className="space-y-5 anim-up">
-
-      {/* Hero KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Fleet avg km/l */}
         <div className="kpi-hero p-6 flex flex-col justify-between sm:col-span-1" style={{minHeight:160}}>
           <div className="relative flex items-center justify-between mb-3">
-            <div className="p-2 rounded-xl" style={{background:'rgba(14,165,233,.25)'}}>
-              <Fuel size={15} style={{color:'#7dd3fc'}} />
-            </div>
-            <span className="text-[7px] font-bold uppercase tracking-widest px-2 py-1 rounded-full"
-              style={{color:'#7dd3fc',background:'rgba(14,165,233,.18)'}}>Flota</span>
+            <div className="p-2 rounded-xl" style={{background:'rgba(14,165,233,.25)'}}><Fuel size={15} style={{color:'#7dd3fc'}} /></div>
+            <span className="text-[7px] font-bold uppercase tracking-widest px-2 py-1 rounded-full" style={{color:'#7dd3fc',background:'rgba(14,165,233,.18)'}}>Flota</span>
           </div>
           <div className="relative">
             <p className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{color:'rgba(255,255,255,.4)'}}>Promedio Flota</p>
@@ -1023,15 +1113,10 @@ function EfficiencyPanel({effStats,trucks,fmt,fmtN}) {
             <p className="text-[10px] mt-1" style={{color:'rgba(255,255,255,.35)'}}>km por litro</p>
           </div>
         </div>
-
-        {/* Cost per km */}
         <div className="kpi-hero p-6 flex flex-col justify-between sm:col-span-1" style={{minHeight:160}}>
           <div className="relative flex items-center justify-between mb-3">
-            <div className="p-2 rounded-xl" style={{background:'rgba(124,58,237,.25)'}}>
-              <Gauge size={15} style={{color:'#c4b5fd'}} />
-            </div>
-            <span className="text-[7px] font-bold uppercase tracking-widest px-2 py-1 rounded-full"
-              style={{color:'#c4b5fd',background:'rgba(124,58,237,.18)'}}>Eficiencia</span>
+            <div className="p-2 rounded-xl" style={{background:'rgba(124,58,237,.25)'}}><Gauge size={15} style={{color:'#c4b5fd'}} /></div>
+            <span className="text-[7px] font-bold uppercase tracking-widest px-2 py-1 rounded-full" style={{color:'#c4b5fd',background:'rgba(124,58,237,.18)'}}>Eficiencia</span>
           </div>
           <div className="relative">
             <p className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{color:'rgba(255,255,255,.4)'}}>Costo por KM</p>
@@ -1039,38 +1124,25 @@ function EfficiencyPanel({effStats,trucks,fmt,fmtN}) {
             <p className="text-[10px] mt-1" style={{color:'rgba(255,255,255,.35)'}}>combustible / km</p>
           </div>
         </div>
-
-        {/* Desvio alerts */}
         <div className="card p-6" style={{borderColor:desvioAlerts.length>0?'#fca5a5':'var(--mist)',background:desvioAlerts.length>0?'#fff5f5':'white'}}>
           <div className="flex items-center gap-2 mb-3">
             <div className="p-2 rounded-xl" style={{background:desvioAlerts.length>0?'#fee2e2':'var(--ice)'}}>
               <AlertTriangle size={14} style={{color:desvioAlerts.length>0?'var(--danger)':'var(--oxford)'}} />
             </div>
-            <p className="text-[8px] font-bold uppercase tracking-widest" style={{color:desvioAlerts.length>0?'var(--danger)':'var(--oxford)'}}>
-              Desvíos &gt; 15%
-            </p>
+            <p className="text-[8px] font-bold uppercase tracking-widest" style={{color:desvioAlerts.length>0?'var(--danger)':'var(--oxford)'}}>Desvíos &gt; 15%</p>
           </div>
-          {desvioAlerts.length===0 ? (
-            <div className="flex items-center gap-2 mt-4">
-              <CheckCircle2 size={20} style={{color:'var(--success)'}}/>
-              <p className="text-sm font-semibold" style={{color:'var(--success)'}}>Sin desvíos detectados</p>
-            </div>
-          ) : (
-            <div className="space-y-2 mt-2 max-h-24 overflow-y-auto">
-              {desvioAlerts.map(t=>(
+          {desvioAlerts.length===0
+            ? <div className="flex items-center gap-2 mt-4"><CheckCircle2 size={20} style={{color:'var(--success)'}}/><p className="text-sm font-semibold" style={{color:'var(--success)'}}>Sin desvíos detectados</p></div>
+            : <div className="space-y-2 mt-2 max-h-24 overflow-y-auto">{desvioAlerts.map((t:any) => (
                 <div key={t.truckId} className="flex items-center justify-between">
                   <span className="font-display font-bold text-xs uppercase" style={{color:'var(--navy)'}}>{t.patente}</span>
-                  <span className="badge-bad px-2 py-0.5 rounded-lg text-[9px] font-bold flex items-center gap-1">
-                    <TrendingDown size={9}/>{fmtN(t.desvio,1)}%
-                  </span>
+                  <span className="badge-bad px-2 py-0.5 rounded-lg text-[9px] font-bold flex items-center gap-1"><TrendingDown size={9}/>{fmtN(t.desvio,1)}%</span>
                 </div>
-              ))}
-            </div>
-          )}
+              ))}</div>
+          }
         </div>
       </div>
 
-      {/* Price evolution chart */}
       {priceEvolution.length>1 && (
         <div className="card p-6">
           <div className="flex items-start justify-between mb-5">
@@ -1078,7 +1150,6 @@ function EfficiencyPanel({effStats,trucks,fmt,fmtN}) {
               <h3 className="font-display font-black text-base uppercase tracking-tight" style={{color:'var(--navy)'}}>Evolución Precio por Litro</h3>
               <p className="text-[10px] mt-0.5" style={{color:'var(--oxford)'}}>Últimas {priceEvolution.length} cargas registradas</p>
             </div>
-            <div className="flex items-center gap-1.5"><div className="w-6 h-0.5 rounded-full" style={{background:'var(--fuel)'}}/><span className="text-[9px] font-bold uppercase" style={{color:'var(--oxford)'}}>$/litro</span></div>
           </div>
           <div className="h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -1091,8 +1162,8 @@ function EfficiencyPanel({effStats,trucks,fmt,fmtN}) {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
                 <XAxis dataKey="fecha" axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} tickFormatter={v=>`$${(v/1000).toFixed(1)}k`} />
-                <Tooltip contentStyle={{background:'var(--navy)',border:'none',borderRadius:10,color:'white',fontSize:11}} formatter={v=>[`$${Number(v).toLocaleString('es-AR')} /L`,'Precio']} />
+                <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} tickFormatter={(v:number) => `$${(v/1000).toFixed(1)}k`} />
+                <Tooltip contentStyle={{background:'var(--navy)',border:'none',borderRadius:10,color:'white',fontSize:11}} formatter={(v:number) => [`$${Number(v).toLocaleString('es-AR')} /L`,'Precio']} />
                 <Area type="monotone" dataKey="precio" stroke="#0ea5e9" strokeWidth={2.5} fill="url(#fuelGrad)" dot={{fill:'#0ea5e9',r:3,strokeWidth:2,stroke:'white'}} name="Precio/L" />
               </AreaChart>
             </ResponsiveContainer>
@@ -1100,7 +1171,6 @@ function EfficiencyPanel({effStats,trucks,fmt,fmtN}) {
         </div>
       )}
 
-      {/* Per-truck table */}
       <div className="card overflow-hidden">
         <div className="p-5 border-b" style={{borderColor:'var(--mist)',background:'var(--ice)'}}>
           <h3 className="font-display font-black text-base uppercase tracking-tight" style={{color:'var(--navy)'}}>Análisis por Unidad</h3>
@@ -1110,20 +1180,16 @@ function EfficiencyPanel({effStats,trucks,fmt,fmtN}) {
           <table className="w-full min-w-[640px]">
             <thead style={{background:'var(--ice)'}}>
               <tr className="border-b" style={{borderColor:'var(--mist)'}}>
-                {['Unidad','Conductor','KM Recorridos','Litros Totales','Rendimiento Prom.','Última Carga','Tendencia'].map(h=>(
+                {['Unidad','Conductor','KM Recorridos','Litros Totales','Rendimiento Prom.','Última Carga','Tendencia'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-[8px] font-bold uppercase tracking-wider" style={{color:'var(--oxford)'}}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y" style={{borderColor:'var(--mist)'}}>
-              {truckEfficiency.length===0 && (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-sm" style={{color:'var(--oxford)'}}>
-                  Sin datos de combustible con litros registrados
-                </td></tr>
-              )}
-              {truckEfficiency.map(t=>{
-                const truck = trucks.find(tr=>tr.id===t.truckId)||{};
-                const tendencia = t.desvio===null ? null : t.desvio>0 ? 'up' : t.desvio<-5 ? 'down' : 'flat';
+              {truckEfficiency.length===0 && <tr><td colSpan={7} className="px-4 py-10 text-center text-sm" style={{color:'var(--oxford)'}}>Sin datos de combustible con litros registrados</td></tr>}
+              {truckEfficiency.map((t:any) => {
+                const truck = trucks.find((tr:any) => tr.id===t.truckId)||{};
+                const tend  = t.desvio===null?null:t.desvio>0?'up':t.desvio<-5?'down':'flat';
                 return (
                   <tr key={t.truckId} className="history-row transition-colors">
                     <td className="px-4 py-3">
@@ -1135,21 +1201,15 @@ function EfficiencyPanel({effStats,trucks,fmt,fmtN}) {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs" style={{color:'var(--oxford)'}}>{truck.chofer||'—'}</td>
-                    <td className="px-4 py-3">
-                      <span className="font-mono font-bold text-xs" style={{color:'var(--navy)'}}>{t.totalKm.toLocaleString('es-AR')} km</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="font-mono font-bold text-xs" style={{color:'var(--navy)'}}>{t.totalLitros.toLocaleString('es-AR',{maximumFractionDigits:1})} L</span>
-                    </td>
+                    <td className="px-4 py-3"><span className="font-mono font-bold text-xs" style={{color:'var(--navy)'}}>{t.totalKm.toLocaleString('es-AR')} km</span></td>
+                    <td className="px-4 py-3"><span className="font-mono font-bold text-xs" style={{color:'var(--navy)'}}>{t.totalLitros.toLocaleString('es-AR',{maximumFractionDigits:1})} L</span></td>
                     <td className="px-4 py-3">{kmLBadge(t.avgKmPL)}</td>
+                    <td className="px-4 py-3"><span className="font-mono text-[9px]" style={{color:'var(--oxford)'}}>{t.lastLoad?.date?.split(',')[0]||'—'}</span></td>
                     <td className="px-4 py-3">
-                      <span className="font-mono text-[9px]" style={{color:'var(--oxford)'}}>{t.lastLoad?.date?.split(',')[0]||'—'}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {tendencia==='up' && <span className="flex items-center gap-1 text-[9px] font-bold" style={{color:'var(--success)'}}><ArrowUp size={11}/>{fmtN(t.desvio,1)}%</span>}
-                      {tendencia==='down' && <span className="flex items-center gap-1 text-[9px] font-bold" style={{color:'var(--danger)'}}><ArrowDown size={11}/>{fmtN(Math.abs(t.desvio),1)}%</span>}
-                      {tendencia==='flat' && <span className="flex items-center gap-1 text-[9px]" style={{color:'var(--oxford)'}}><Minus size={11}/>Estable</span>}
-                      {tendencia===null && <span className="text-[9px]" style={{color:'var(--mist)'}}>—</span>}
+                      {tend==='up'   && <span className="flex items-center gap-1 text-[9px] font-bold" style={{color:'var(--success)'}}><ArrowUp size={11}/>{fmtN(t.desvio,1)}%</span>}
+                      {tend==='down' && <span className="flex items-center gap-1 text-[9px] font-bold" style={{color:'var(--danger)'}}><ArrowDown size={11}/>{fmtN(Math.abs(t.desvio),1)}%</span>}
+                      {tend==='flat' && <span className="flex items-center gap-1 text-[9px]" style={{color:'var(--oxford)'}}><Minus size={11}/>Estable</span>}
+                      {tend===null   && <span className="text-[9px]" style={{color:'var(--mist)'}}>—</span>}
                     </td>
                   </tr>
                 );
@@ -1159,11 +1219,10 @@ function EfficiencyPanel({effStats,trucks,fmt,fmtN}) {
         </div>
       </div>
 
-      {/* Legend */}
       <div className="card p-4">
         <p className="text-[9px] font-bold uppercase tracking-widest mb-3" style={{color:'var(--oxford)'}}>Referencia de Rendimiento</p>
         <div className="flex flex-wrap gap-3">
-          {[{cls:'badge-good',label:'Óptimo ≥ 4 km/l'},{cls:'badge-warn',label:'Regular 3–4 km/l'},{cls:'badge-bad',label:'Deficiente < 3 km/l'}].map(b=>(
+          {[{cls:'badge-good',label:'Óptimo ≥ 4 km/l'},{cls:'badge-warn',label:'Regular 3–4 km/l'},{cls:'badge-bad',label:'Deficiente < 3 km/l'}].map(b => (
             <span key={b.label} className={`${b.cls} px-3 py-1.5 rounded-lg text-[9px] font-bold`}>{b.label}</span>
           ))}
         </div>
@@ -1173,41 +1232,75 @@ function EfficiencyPanel({effStats,trucks,fmt,fmtN}) {
 }
 
 // ─── FLOTA PANEL ──────────────────────────────────────────────────────────────
-function FlotaPanel({stats,setModals}) {
+
+function FlotaPanel({stats, setModals}: any) {
+  const [statusFilter, setStatusFilter] = useState('');
+
+  const STATUS_FILTERS = [
+    {value:'',           label:'Todos'},
+    {value:'disponible', label:'Disponible'},
+    {value:'en_viaje',   label:'En Viaje'},
+    {value:'en_taller',  label:'En Taller'},
+    {value:'inactivo',   label:'Inactivo'},
+  ];
+
+  const filtered = statusFilter
+    ? stats.truckStats.filter((t:any) => t.status===statusFilter)
+    : stats.truckStats;
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-      {stats.truckStats.map(truck=>(
-        <TruckCard key={truck.id} truck={truck}
-          onDelete={()=>setModals(m=>({...m,delete:truck}))}
-          onEdit={()=>setModals(m=>({...m,editTruck:truck}))} />
-      ))}
-      <button onClick={()=>setModals(m=>({...m,truck:true}))}
-        className="group border-2 border-dashed rounded-[20px] p-8 flex flex-col items-center justify-center gap-3 transition-all min-h-[240px]"
-        style={{borderColor:'var(--mist)'}}
-        onMouseEnter={e=>{e.currentTarget.style.borderColor='var(--accent)';e.currentTarget.style.background='#eff6ff'}}
-        onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--mist)';e.currentTarget.style.background='transparent'}}>
-        <div className="w-12 h-12 rounded-full flex items-center justify-center shadow-inner" style={{background:'var(--ice)'}}>
-          <Plus size={22} style={{color:'var(--mist)'}} />
-        </div>
-        <span className="text-[9px] font-bold uppercase tracking-widest" style={{color:'var(--oxford)'}}>Añadir Unidad</span>
-      </button>
+    <div className="space-y-4">
+      {/* Status filters */}
+      <div className="flex flex-wrap gap-2">
+        {STATUS_FILTERS.map(f => {
+          const meta = STATUS_META[f.value];
+          const count = f.value ? stats.truckStats.filter((t:any)=>t.status===f.value).length : stats.truckStats.length;
+          return (
+            <button key={f.value} onClick={() => setStatusFilter(f.value)}
+              className="px-3 py-1.5 rounded-xl font-bold text-[9px] uppercase border-2 transition-all flex items-center gap-1.5"
+              style={statusFilter===f.value
+                ? {background:meta?.color||'var(--navy)',color:'white',borderColor:meta?.color||'var(--navy)'}
+                : {background:'white',color:'var(--oxford)',borderColor:'var(--mist)'}
+              }>
+              {f.label}
+              <span className="px-1.5 py-0.5 rounded-full text-[7px] font-black"
+                style={statusFilter===f.value
+                  ? {background:'rgba(255,255,255,.25)',color:'white'}
+                  : {background:'var(--ice)',color:'var(--oxford)'}
+                }>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        {filtered.map((truck:any) => (
+          <TruckCard key={truck.id} truck={truck}
+            onDelete={() => setModals((m:any) => ({...m,delete:truck}))}
+            onEdit={()   => setModals((m:any) => ({...m,editTruck:truck}))} />
+        ))}
+        <button onClick={() => setModals((m:any) => ({...m,truck:true}))}
+          className="group border-2 border-dashed rounded-[20px] p-8 flex flex-col items-center justify-center gap-3 transition-all min-h-[240px]"
+          style={{borderColor:'var(--mist)'}}
+          onMouseEnter={e => {(e.currentTarget as HTMLElement).style.borderColor='var(--accent)';(e.currentTarget as HTMLElement).style.background='#eff6ff'}}
+          onMouseLeave={e => {(e.currentTarget as HTMLElement).style.borderColor='var(--mist)';(e.currentTarget as HTMLElement).style.background='transparent'}}>
+          <div className="w-12 h-12 rounded-full flex items-center justify-center shadow-inner" style={{background:'var(--ice)'}}>
+            <Plus size={22} style={{color:'var(--mist)'}} />
+          </div>
+          <span className="text-[9px] font-bold uppercase tracking-widest" style={{color:'var(--oxford)'}}>Añadir Unidad</span>
+        </button>
+      </div>
     </div>
   );
 }
 
 // ─── TRUCK CARD ───────────────────────────────────────────────────────────────
-function TruckCard({truck,onDelete,onEdit}) {
-  const [showVar,setShowVar] = useState(false);
-  const fmt = v => new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
-  const alertSeguro = alertVencimiento(truck.seguro_venc);
-  const alertVtv    = alertVencimiento(truck.vtv_venc);
-  const desgloseEntries = Object.entries(truck.desglose||{}).sort((a,b)=>b[1]-a[1]);
 
-  const alertBadge = (alert,label) => {
-    if (!alert) return null;
-    const cls = alert==='vencido'?'badge-bad':'badge-warn';
-    return <span className={`${cls} inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[7px] font-bold`}><AlertIcon size={7}/> {label} {alert==='vencido'?'VENCIDO':'PRÓXIMO'}</span>;
-  };
+function TruckCard({truck, onDelete, onEdit}: any) {
+  const [showVar, setShowVar] = useState(false);
+  const fmt = (v:number) => new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(v||0);
+  const desgloseEntries = Object.entries(truck.desglose||{}).sort((a:any,b:any) => b[1]-a[1]) as [string,number][];
+  const statusMeta = STATUS_META[truck.status] || STATUS_META.disponible;
 
   return (
     <div className="truck-card p-5">
@@ -1219,6 +1312,9 @@ function TruckCard({truck,onDelete,onEdit}) {
           <div>
             <h3 className="font-display font-black text-base uppercase leading-tight" style={{color:'var(--navy)'}}>{truck.chofer||'Sin chofer'}</h3>
             <p className="text-[8px] font-bold mt-0.5 uppercase tracking-widest" style={{color:'var(--oxford)'}}>{truck.patente}</p>
+            {(truck.marca||truck.modelo) && (
+              <p className="text-[8px] mt-0.5" style={{color:'var(--oxford)'}}>{truck.marca} {truck.modelo} {truck.anio?`(${truck.anio})`:''}</p>
+            )}
           </div>
         </div>
         <div className="flex gap-1">
@@ -1227,7 +1323,20 @@ function TruckCard({truck,onDelete,onEdit}) {
         </div>
       </div>
 
-      {(alertSeguro||alertVtv)&&<div className="flex flex-wrap gap-1 mb-3">{alertBadge(alertSeguro,'Seguro')}{alertBadge(alertVtv,'VTV')}</div>}
+      {/* Status badge */}
+      <div className="mb-3">
+        <span className="inline-flex items-center px-2.5 py-1 rounded-xl text-[8px] font-black uppercase border"
+          style={{background:statusMeta.bg,borderColor:statusMeta.border,color:statusMeta.color}}>
+          <span className="w-1.5 h-1.5 rounded-full mr-1.5" style={{background:statusMeta.color}}/>
+          {statusMeta.label}
+        </span>
+        {truck.tipoFuel && (
+          <span className="ml-2 px-2 py-0.5 rounded-lg text-[7px] font-bold uppercase"
+            style={{background:'#f0f9ff',color:'var(--fuel)',border:'1px solid #bae6fd'}}>
+            {truck.tipoFuel.toUpperCase()}
+          </span>
+        )}
+      </div>
 
       <div className="mb-4">
         <p className="text-[7px] font-bold uppercase tracking-widest mb-1" style={{color:'var(--oxford)'}}>Egresos del Período</p>
@@ -1235,7 +1344,7 @@ function TruckCard({truck,onDelete,onEdit}) {
       </div>
 
       <div className="space-y-2 pt-3 border-t" style={{borderColor:'var(--ice)'}}>
-        {[{label:'Seguro',val:truck.seguro},{label:'VTV',val:truck.vtv_costo},{label:'Hab. Municipal',val:truck.muni_costo}].map((item,idx)=>(
+        {[{label:'Seguro',val:truck.seguro},{label:'VTV',val:truck.vtv_costo},{label:'Hab. Municipal',val:truck.muni_costo}].map((item,idx) => (
           <div key={idx} className="flex items-center justify-between">
             <span className="text-[8px] font-bold uppercase" style={{color:'var(--oxford)'}}>{item.label}</span>
             <span className="font-mono text-[9px] font-bold" style={{color:'var(--navy)'}}>{fmt(item.val)}</span>
@@ -1243,24 +1352,23 @@ function TruckCard({truck,onDelete,onEdit}) {
         ))}
       </div>
 
-      <button onClick={()=>setShowVar(!showVar)} className="w-full mt-3 pt-3 border-t flex items-center justify-between text-left" style={{borderColor:'var(--ice)'}}>
+      <button onClick={() => setShowVar(!showVar)} className="w-full mt-3 pt-3 border-t flex items-center justify-between text-left" style={{borderColor:'var(--ice)'}}>
         <span className="text-[8px] font-bold uppercase" style={{color:'var(--oxford)'}}>Variables del Período</span>
         <div className="flex items-center gap-2">
           <span className="font-mono text-[9px] font-bold" style={{color:'#f97316'}}>{fmt(truck.varTotal)}</span>
           {showVar?<ChevronUp size={11} style={{color:'var(--oxford)'}}/>:<ChevronDown size={11} style={{color:'var(--oxford)'}}/>}
         </div>
       </button>
-
-      {showVar&&(
+      {showVar && (
         <div className="mt-2 rounded-xl p-3 space-y-1.5" style={{background:'#fff7ed',border:'1px solid #fed7aa'}}>
           {desgloseEntries.length===0
-            ?<p className="text-[8px] text-center" style={{color:'var(--oxford)'}}>Sin gastos variables</p>
-            :desgloseEntries.map(([cat,monto])=>(
-              <div key={cat} className="flex items-center justify-between">
-                <span className="text-[8px] font-bold uppercase truncate max-w-[130px]" style={{color:'var(--steel)'}}>{cat}</span>
-                <span className="font-mono text-[9px] font-bold ml-2" style={{color:'#c2410c'}}>{fmt(monto)}</span>
-              </div>
-            ))
+            ? <p className="text-[8px] text-center" style={{color:'var(--oxford)'}}>Sin gastos variables</p>
+            : desgloseEntries.map(([cat,monto]) => (
+                <div key={cat} className="flex items-center justify-between">
+                  <span className="text-[8px] font-bold uppercase truncate max-w-[130px]" style={{color:'var(--steel)'}}>{cat}</span>
+                  <span className="font-mono text-[9px] font-bold ml-2" style={{color:'#c2410c'}}>{fmt(monto)}</span>
+                </div>
+              ))
           }
         </div>
       )}
@@ -1270,7 +1378,15 @@ function TruckCard({truck,onDelete,onEdit}) {
           <Gauge size={11} style={{color:'var(--accent)'}}/>
           <span className="text-[8px] font-bold uppercase" style={{color:'var(--oxford)'}}>{(truck.kmActual||0).toLocaleString()} KM</span>
         </div>
-        {truck.costoPorKm>0&&(
+        {truck.kmProximoService>0 && (
+          <div className="text-right">
+            <p className="text-[7px] font-bold uppercase" style={{color:'var(--oxford)'}}>Próx. Service</p>
+            <p className="font-mono text-[9px] font-bold" style={{color: (truck.kmProximoService-truck.kmActual)<=500?'var(--danger)':(truck.kmProximoService-truck.kmActual)<=1000?'var(--warn)':'var(--navy)'}}>
+              {(truck.kmProximoService-truck.kmActual).toLocaleString('es-AR')} km
+            </p>
+          </div>
+        )}
+        {(!truck.kmProximoService||truck.kmProximoService===0) && truck.costoPorKm>0 && (
           <div className="text-right">
             <p className="text-[7px] font-bold uppercase" style={{color:'var(--oxford)'}}>Costo/KM</p>
             <p className="font-mono text-[9px] font-bold" style={{color:'var(--navy)'}}>{fmt(truck.costoPorKm)}</p>
@@ -1281,16 +1397,339 @@ function TruckCard({truck,onDelete,onEdit}) {
   );
 }
 
-// ─── EXPENSE MODAL ────────────────────────────────────────────────────────────
-function ExpenseModal({trucks,onSubmit,onClose,history}) {
-  const [tipoGasto,setTipoGasto] = useState('');
-  const [mantOpen,setMantOpen]   = useState(false);
-  const [subCat,setSubCat]       = useState('');
-  const [variosDesc,setVariosDesc] = useState('');
-  const [selectedTruck,setSelectedTruck] = useState('');
-  const [kmError,setKmError]     = useState('');
+// ─── ALTA UNIDAD MODAL (replaces TruckFormModal) ──────────────────────────────
 
-  const opciones=[
+function AltaUnidadModal({initial={} as any, onSubmit, onClose}: any) {
+  const isEdit = Boolean(initial.id);
+  const [saving,    setSaving]    = useState(false);
+  const [errors,    setErrors]    = useState<Record<string,string>>({});
+  const [tipoFuel,  setTipoFuel]  = useState(initial.tipoFuel||'diesel');
+  const [status,    setStatus]    = useState(initial.status||'disponible');
+  const [seguroAdj, setSeguroAdj] = useState<{file:File|null;url:string;progress:number}>({file:null,url:'',progress:0});
+  const [vtvAdj,    setVtvAdj]    = useState<{file:File|null;url:string;progress:number}>({file:null,url:'',progress:0});
+  const seguroRef = useRef<HTMLInputElement>(null);
+  const vtvRef    = useRef<HTMLInputElement>(null);
+
+  const CURRENT_YEAR = new Date().getFullYear();
+
+  const validate = (f: Record<string,any>) => {
+    const e: Record<string,string> = {};
+    if (!f.patente) e.patente='Requerido';
+    else if (!/^[A-Z]{2}\d{3}[A-Z]{2}$|^[A-Z]{3}\d{3}$/.test(String(f.patente).toUpperCase())) e.patente='Formato inválido (AA123BB o ABC123)';
+    if (!f.marca)  e.marca='Requerido';
+    if (!f.modelo) e.modelo='Requerido';
+    if (!f.anio||Number(f.anio)<1980||Number(f.anio)>CURRENT_YEAR+1) e.anio=`Año entre 1980 y ${CURRENT_YEAR+1}`;
+    if (!f.capacidadTanque||Number(f.capacidadTanque)<=0) e.capacidadTanque='Capacidad > 0';
+    if (!f.chofer) e.chofer='Requerido';
+    if (f.kmProximoService&&Number(f.kmProximoService)>0&&Number(f.kmProximoService)<=Number(f.kmActual||0)) e.kmProximoService='Debe ser mayor al KM actual';
+    return e;
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const fields = {
+      patente:         String(fd.get('patente')||'').toUpperCase().trim(),
+      marca:           String(fd.get('marca')||'').trim(),
+      modelo:          String(fd.get('modelo')||'').trim(),
+      anio:            Number(fd.get('anio')),
+      capacidadTanque: Number(fd.get('capacidadTanque')),
+      chofer:          String(fd.get('chofer')||'').trim(),
+      kmActual:        Number(fd.get('kmActual'))||0,
+      kmProximoService:Number(fd.get('kmProximoService'))||0,
+    };
+    const errs = validate(fields);
+    if (Object.keys(errs).length>0) { setErrors(errs); return; }
+    setErrors({});
+    setSaving(true);
+    try {
+      await onSubmit({
+        ...fields,
+        tipoFuel, status,
+        kmInicio: isEdit?(initial.kmInicio||0):fields.kmActual,
+        habMunicipal: Number(fd.get('habMunicipal'))||0,
+        // Keep flat legacy fields for backward compat
+        seguro:      Number(fd.get('seguroMonto'))||0,
+        vtv_costo:   Number(fd.get('vtvMonto'))||0,
+        muni_costo:  Number(fd.get('habMunicipal'))||0,
+        seguro_venc: String(fd.get('seguroVenc')||''),
+        vtv_venc:    String(fd.get('vtvVenc')||''),
+        seguro_poliza: String(fd.get('seguroPoliza')||''),
+        vtv_poliza:    String(fd.get('vtvPoliza')||''),
+      });
+    } finally { setSaving(false); }
+  };
+
+  const FieldErr = ({msg}: {msg?:string}) => msg
+    ? <p className="text-[8px] mt-0.5 font-semibold flex items-center gap-1" style={{color:'var(--danger)'}}><AlertCircle size={9}/>{msg}</p>
+    : null;
+
+  const SectionHead = ({Icon, title, accent='var(--navy)'}: any) => (
+    <div className="flex items-center gap-2 pt-4 pb-1 border-t" style={{borderColor:'var(--mist)'}}>
+      <div className="p-1.5 rounded-lg" style={{background:`${accent}18`}}><Icon size={13} style={{color:accent}}/></div>
+      <p className="text-[8px] font-bold uppercase tracking-widest" style={{color:accent}}>{title}</p>
+    </div>
+  );
+
+  const FUEL_OPTS = [{value:'diesel',label:'Diesel',emoji:'⛽'},{value:'nafta',label:'Nafta',emoji:'🔴'},{value:'gnc',label:'GNC',emoji:'🟢'}];
+  const STATUS_OPTS = [
+    {value:'disponible',label:'Disponible',color:'var(--success)'},
+    {value:'en_viaje',  label:'En Viaje',  color:'var(--accent)'},
+    {value:'en_taller', label:'En Taller', color:'var(--warn)'},
+    {value:'inactivo',  label:'Inactivo',  color:'var(--oxford)'},
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overlay">
+      <div className="modal w-full max-w-2xl p-7 max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{background:'linear-gradient(135deg,#1d4ed8,#2563eb)',boxShadow:'0 4px 14px rgba(37,99,235,.35)'}}>
+              <Truck size={16} className="text-white" />
+            </div>
+            <div>
+              <h2 className="font-display font-black text-xl uppercase tracking-tight" style={{color:'var(--navy)'}}>
+                {isEdit?'Editar Unidad':'Alta de Unidad'}
+              </h2>
+              {isEdit&&<p className="text-[9px] font-bold" style={{color:'var(--accent)'}}>{initial.patente}</p>}
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-xl transition-all hover:bg-slate-100" style={{color:'var(--oxford)'}}><X size={16}/></button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <SectionHead Icon={Truck} title="Identificación del Vehículo" />
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Patente *</label>
+              {isEdit
+                ? <div className="inp p-3 text-sm font-bold uppercase opacity-60">{initial.patente}</div>
+                : <>
+                    <input name="patente" placeholder="AA123BB" defaultValue={initial.patente||''}
+                      className={`inp w-full p-3 text-sm${errors.patente?' border-red-400':''}`}
+                      style={{textTransform:'uppercase'}} onChange={e=>{e.target.value=e.target.value.toUpperCase();}} />
+                    <FieldErr msg={errors.patente} />
+                  </>
+              }
+            </div>
+            <div>
+              <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Año *</label>
+              <input name="anio" type="number" placeholder={String(CURRENT_YEAR)} defaultValue={initial.anio||''}
+                className={`inp w-full p-3 text-sm${errors.anio?' border-red-400':''}`} min={1980} max={CURRENT_YEAR+1} />
+              <FieldErr msg={errors.anio} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Marca *</label>
+              <input name="marca" placeholder="Mercedes-Benz" defaultValue={initial.marca||''} className={`inp w-full p-3 text-sm${errors.marca?' border-red-400':''}`} />
+              <FieldErr msg={errors.marca} />
+            </div>
+            <div>
+              <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Modelo *</label>
+              <input name="modelo" placeholder="Atego 1725" defaultValue={initial.modelo||''} className={`inp w-full p-3 text-sm${errors.modelo?' border-red-400':''}`} />
+              <FieldErr msg={errors.modelo} />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Chofer Asignado *</label>
+            <input name="chofer" placeholder="Nombre completo" defaultValue={initial.chofer||''} className={`inp w-full p-3 text-sm${errors.chofer?' border-red-400':''}`} />
+            <FieldErr msg={errors.chofer} />
+          </div>
+
+          <div>
+            <label className="text-[8px] font-bold uppercase tracking-wider block mb-2" style={{color:'var(--oxford)'}}>Estado Operativo</label>
+            <div className="flex flex-wrap gap-2">
+              {STATUS_OPTS.map(opt => (
+                <button key={opt.value} type="button" onClick={() => setStatus(opt.value)}
+                  className="px-3 py-1.5 rounded-xl font-bold text-[9px] uppercase border-2 transition-all"
+                  style={status===opt.value?{background:opt.color,color:'white',borderColor:opt.color}:{background:'var(--ice)',color:'var(--oxford)',borderColor:'var(--mist)'}}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <SectionHead Icon={Fuel} title="Motor y Combustible" accent="#0ea5e9" />
+
+          <div>
+            <label className="text-[8px] font-bold uppercase tracking-wider block mb-2" style={{color:'var(--oxford)'}}>Tipo de Combustible *</label>
+            <div className="grid grid-cols-3 gap-2">
+              {FUEL_OPTS.map(opt => (
+                <button key={opt.value} type="button" onClick={() => setTipoFuel(opt.value)}
+                  className="p-3 rounded-xl font-bold text-xs uppercase border-2 transition-all"
+                  style={tipoFuel===opt.value?{background:'#0ea5e9',color:'white',borderColor:'#0ea5e9',boxShadow:'0 4px 14px rgba(14,165,233,.3)'}:{background:'var(--ice)',color:'var(--oxford)',borderColor:'var(--mist)'}}>
+                  {opt.emoji} {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Capacidad del Tanque (Litros) *</label>
+            <input name="capacidadTanque" type="number" step="1" placeholder="300" defaultValue={initial.capacidadTanque||''}
+              className={`inp w-full p-3 text-sm${errors.capacidadTanque?' border-red-400':''}`} />
+            <FieldErr msg={errors.capacidadTanque} />
+          </div>
+
+          <SectionHead Icon={Gauge} title="Odómetro y Service Preventivo" accent="#7c3aed" />
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>KM Actual</label>
+              <input name="kmActual" type="number" placeholder="0" defaultValue={initial.kmActual||''} className="inp w-full p-3 text-sm" />
+            </div>
+            <div>
+              <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>KM Próximo Service</label>
+              <input name="kmProximoService" type="number" placeholder="Ej: 220000" defaultValue={initial.kmProximoService||''} className={`inp w-full p-3 text-sm${errors.kmProximoService?' border-red-400':''}`} />
+              <FieldErr msg={errors.kmProximoService} />
+              <p className="text-[8px] mt-0.5" style={{color:'var(--oxford)'}}>Alerta crítica a {ALERT_THRESHOLDS.SERVICE_CRITICAL_KM} km</p>
+            </div>
+          </div>
+
+          <SectionHead Icon={Wrench} title="Costos Fijos" accent="var(--success)" />
+
+          <div className="grid grid-cols-3 gap-3">
+            {[{name:'seguroMonto',label:'Seguro ($/mes)',  val:initial.seguro||initial.seguro?.montoCosto},
+              {name:'vtvMonto',   label:'VTV ($/mes)',     val:initial.vtv_costo||initial.vtv?.montoCosto},
+              {name:'habMunicipal',label:'Hab. Mun. ($/mes)', val:initial.muni_costo||initial.habMunicipal}
+            ].map(f => (
+              <div key={f.name}>
+                <label className="text-[8px] font-bold uppercase block mb-1" style={{color:'var(--oxford)'}}>{f.label}</label>
+                <input name={f.name} type="number" placeholder="0" defaultValue={f.val||''} className="inp w-full p-2.5 text-sm" />
+              </div>
+            ))}
+          </div>
+
+          <SectionHead Icon={FileText} title="Documentación — Seguro" accent="var(--accent)" />
+
+          <div className="rounded-2xl p-4 border space-y-3" style={{background:'#f8faff',borderColor:'rgba(37,99,235,.12)'}}>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Número de Póliza</label>
+                <div className="relative">
+                  <Hash size={11} className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:'var(--oxford)'}} />
+                  <input name="seguroPoliza" placeholder="Nº póliza" defaultValue={initial.seguro_poliza||initial.seguro?.numeroPoliza||''} className="inp w-full pl-8 p-3 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Vencimiento</label>
+                <div className="relative">
+                  <Calendar size={11} className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:'var(--oxford)'}} />
+                  <input name="seguroVenc" type="date" defaultValue={initial.seguro_venc||initial.seguro?.vencimiento||''} className="inp w-full pl-8 p-3 text-sm" />
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Adjuntar Póliza (PDF o foto)</label>
+              {seguroAdj.file
+                ? <div className="flex items-center gap-2 p-2 rounded-xl border" style={{background:'#f0fdf4',borderColor:'#bbf7d0'}}>
+                    <FileText size={13} style={{color:'var(--success)'}}/>
+                    <span className="text-[9px] flex-1 truncate">{seguroAdj.file.name}</span>
+                    <CheckCircle2 size={13} style={{color:'var(--success)'}}/>
+                    <button type="button" onClick={() => setSeguroAdj({file:null,url:'',progress:0})} className="p-0.5"><X size={11} style={{color:'var(--oxford)'}}/></button>
+                  </div>
+                : <label className="flex items-center gap-2 p-3 rounded-xl border-2 border-dashed cursor-pointer transition-all"
+                    style={{borderColor:'var(--mist)',background:'var(--ice)'}}>
+                    <Upload size={14} style={{color:'var(--oxford)'}}/>
+                    <span className="text-[9px] font-medium" style={{color:'var(--oxford)'}}>Arrastrá o hacé click — PDF, JPG, PNG</span>
+                    <input ref={seguroRef} type="file" accept="application/pdf,image/*" className="hidden"
+                      onChange={e => { if(e.target.files?.[0]) setSeguroAdj({file:e.target.files[0],url:URL.createObjectURL(e.target.files[0]),progress:100}); }} />
+                  </label>
+              }
+            </div>
+          </div>
+
+          <SectionHead Icon={FileText} title="Documentación — VTV" accent="var(--warn)" />
+
+          <div className="rounded-2xl p-4 border space-y-3" style={{background:'#fffbeb',borderColor:'rgba(217,119,6,.12)'}}>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Número de Certificado</label>
+                <div className="relative">
+                  <Hash size={11} className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:'var(--oxford)'}} />
+                  <input name="vtvPoliza" placeholder="Nº certificado" defaultValue={initial.vtv_poliza||initial.vtv?.numeroPoliza||''} className="inp w-full pl-8 p-3 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Vencimiento</label>
+                <div className="relative">
+                  <Calendar size={11} className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:'var(--oxford)'}} />
+                  <input name="vtvVenc" type="date" defaultValue={initial.vtv_venc||initial.vtv?.vencimiento||''} className="inp w-full pl-8 p-3 text-sm" />
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Adjuntar VTV (PDF o foto)</label>
+              {vtvAdj.file
+                ? <div className="flex items-center gap-2 p-2 rounded-xl border" style={{background:'#f0fdf4',borderColor:'#bbf7d0'}}>
+                    <FileText size={13} style={{color:'var(--success)'}}/>
+                    <span className="text-[9px] flex-1 truncate">{vtvAdj.file.name}</span>
+                    <CheckCircle2 size={13} style={{color:'var(--success)'}}/>
+                    <button type="button" onClick={() => setVtvAdj({file:null,url:'',progress:0})} className="p-0.5"><X size={11} style={{color:'var(--oxford)'}}/></button>
+                  </div>
+                : <label className="flex items-center gap-2 p-3 rounded-xl border-2 border-dashed cursor-pointer transition-all"
+                    style={{borderColor:'var(--mist)',background:'var(--ice)'}}>
+                    <Upload size={14} style={{color:'var(--oxford)'}}/>
+                    <span className="text-[9px] font-medium" style={{color:'var(--oxford)'}}>Arrastrá o hacé click — PDF, JPG, PNG</span>
+                    <input ref={vtvRef} type="file" accept="application/pdf,image/*" className="hidden"
+                      onChange={e => { if(e.target.files?.[0]) setVtvAdj({file:e.target.files[0],url:URL.createObjectURL(e.target.files[0]),progress:100}); }} />
+                  </label>
+              }
+            </div>
+          </div>
+
+          {initial.editadoPor && (
+            <div className="rounded-xl p-3 text-[8px] font-medium border" style={{background:'#eff6ff',borderColor:'#bfdbfe',color:'var(--accent)'}}>
+              ✏️ Última edición: <span className="font-bold">{initial.editadoPor}</span> — {initial.editadoAt?new Date(initial.editadoAt).toLocaleString('es-AR'):''}
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 p-3.5 rounded-xl font-bold text-xs uppercase transition-all" style={{background:'var(--ice)',color:'var(--oxford)'}}>Cancelar</button>
+            <button type="submit" disabled={saving} className="flex-1 p-3.5 text-white rounded-xl font-bold text-xs uppercase disabled:opacity-50 transition-all"
+              style={{background:'linear-gradient(135deg,#1d4ed8,#2563eb)',boxShadow:'0 8px 22px rgba(37,99,235,.3)'}}>
+              {saving?<span className="flex items-center justify-center gap-2"><Loader2 size={14} className="animate-spin"/>Guardando...</span>:isEdit?'Guardar Cambios':'Registrar Unidad'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── EXPENSE MODAL ────────────────────────────────────────────────────────────
+
+function ExpenseModal({trucks, onSubmit, onClose, history}: any) {
+  const [tipoGasto,  setTipoGasto]  = useState('');
+  const [mantOpen,   setMantOpen]   = useState(false);
+  const [subCat,     setSubCat]     = useState('');
+  const [variosDesc, setVariosDesc] = useState('');
+  const [selectedTruck, setSelectedTruck] = useState('');
+  const [kmError,    setKmError]    = useState('');
+  const [ticketFile, setTicketFile] = useState<File|null>(null);
+
+  const lastKm = useMemo(() => {
+    if (!selectedTruck) return 0;
+    const loads = history
+      .filter((h:any) => h.truckId===selectedTruck && isFuel(h.categoryLabel) && (h.km_registro||0)>0 && h.status!=='baja')
+      .sort((a:any,b:any) => b.timestamp-a.timestamp);
+    return loads[0]?.km_registro || trucks.find((t:any)=>t.id===selectedTruck)?.kmActual || 0;
+  }, [selectedTruck, history, trucks]);
+
+  const validateKm = (val: string) => {
+    if (!val) { setKmError(''); return; }
+    if (parseFloat(val)<=lastKm) setKmError(`KM debe ser mayor al último registrado (${lastKm.toLocaleString('es-AR')} km)`);
+    else setKmError('');
+  };
+
+  const canSubmit = tipoGasto && (tipoGasto==='combustible'||(tipoGasto==='mantenimiento'&&subCat&&(subCat!=='varios'||variosDesc))) && !kmError;
+
+  const OPCIONES=[
     {value:'mecanico',label:'🔧 Mecánico'},{value:'elastiquero',label:'🔩 Elastiquero'},
     {value:'chapista',label:'🚗 Chapista'},{value:'tapicero',label:'🪑 Tapicero'},
     {value:'gomeria',label:'🔄 Gomería'},{value:'electricista',label:'⚡ Electricista'},
@@ -1298,26 +1737,9 @@ function ExpenseModal({trucks,onSubmit,onClose,history}) {
     {value:'varios',label:'📦 Varios'},
   ];
 
-  // Get last km for selected truck
-  const lastKm = useMemo(()=>{
-    if (!selectedTruck) return 0;
-    const fuelLoads = history
-      .filter(h=>h.truckId===selectedTruck && isFuel(h.categoryLabel) && h.km_registro>0 && h.status!=='baja')
-      .sort((a,b)=>b.timestamp-a.timestamp);
-    return fuelLoads[0]?.km_registro || trucks.find(t=>t.id===selectedTruck)?.kmActual || 0;
-  },[selectedTruck,history,trucks]);
-
-  const validateKm = (val) => {
-    if (!val) { setKmError(''); return; }
-    if (parseFloat(val)<=lastKm) setKmError(`El KM debe ser mayor al último registrado (${lastKm.toLocaleString('es-AR')} km)`);
-    else setKmError('');
-  };
-
-  const canSubmit = tipoGasto && (tipoGasto==='combustible'||(tipoGasto==='mantenimiento'&&subCat&&(subCat!=='varios'||variosDesc))) && !kmError;
-
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    onSubmit(e,{category:tipoGasto==='combustible'?'combustible':subCat,variosDesc:subCat==='varios'?variosDesc:''});
+    onSubmit(e,{category:tipoGasto==='combustible'?'combustible':subCat,variosDesc:subCat==='varios'?variosDesc:'',fotoTicket:ticketFile});
   };
 
   return (
@@ -1328,20 +1750,20 @@ function ExpenseModal({trucks,onSubmit,onClose,history}) {
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <select name="truckId" required className="inp w-full p-3.5 appearance-none"
-            value={selectedTruck} onChange={e=>setSelectedTruck(e.target.value)}>
+            value={selectedTruck} onChange={e => setSelectedTruck(e.target.value)}>
             <option value="">Seleccione Unidad...</option>
-            {trucks.map(t=><option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
+            {trucks.map((t:any) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
           </select>
 
           <div className="space-y-2">
             <p className="text-[8px] font-bold uppercase tracking-wider" style={{color:'var(--oxford)'}}>Tipo de Gasto</p>
             <div className="grid grid-cols-2 gap-3">
-              <button type="button" onClick={()=>{setTipoGasto('combustible');setSubCat('');setMantOpen(false);}}
+              <button type="button" onClick={() => {setTipoGasto('combustible');setSubCat('');setMantOpen(false);}}
                 className="p-4 rounded-xl font-bold text-sm uppercase border-2 transition-all"
                 style={tipoGasto==='combustible'?{background:'#0ea5e9',color:'white',borderColor:'#0ea5e9',boxShadow:'0 6px 20px rgba(14,165,233,.35)'}:{background:'var(--ice)',color:'var(--oxford)',borderColor:'var(--mist)'}}>
                 ⛽ Combustible
               </button>
-              <button type="button" onClick={()=>{setTipoGasto('mantenimiento');setMantOpen(o=>!o);}}
+              <button type="button" onClick={() => {setTipoGasto('mantenimiento');setMantOpen(o=>!o);}}
                 className="p-4 rounded-xl font-bold text-sm uppercase border-2 transition-all flex items-center justify-center gap-2"
                 style={tipoGasto==='mantenimiento'?{background:'var(--navy)',color:'white',borderColor:'var(--navy)',boxShadow:'0 6px 20px rgba(11,17,32,.3)'}:{background:'var(--ice)',color:'var(--oxford)',borderColor:'var(--mist)'}}>
                 🔧 Mantenimiento <span className={`text-xs inline-block transition-transform ${mantOpen?'rotate-180':''}`}>▼</span>
@@ -1349,10 +1771,10 @@ function ExpenseModal({trucks,onSubmit,onClose,history}) {
             </div>
           </div>
 
-          {tipoGasto==='mantenimiento'&&mantOpen&&(
+          {tipoGasto==='mantenimiento'&&mantOpen && (
             <div className="grid grid-cols-3 gap-2 p-4 rounded-xl border" style={{background:'#f8faff',borderColor:'var(--mist)'}}>
-              {opciones.map(op=>(
-                <button key={op.value} type="button" onClick={()=>{setSubCat(op.value);setMantOpen(false);}}
+              {OPCIONES.map(op => (
+                <button key={op.value} type="button" onClick={() => {setSubCat(op.value);setMantOpen(false);}}
                   className="p-2.5 rounded-xl font-bold text-[9px] uppercase text-left border transition-all"
                   style={subCat===op.value?{background:'var(--navy)',color:'white',borderColor:'var(--navy)'}:{background:'white',color:'var(--steel)',borderColor:'var(--mist)'}}>
                   {op.label}
@@ -1361,23 +1783,22 @@ function ExpenseModal({trucks,onSubmit,onClose,history}) {
             </div>
           )}
 
-          {tipoGasto==='mantenimiento'&&subCat&&(
+          {tipoGasto==='mantenimiento'&&subCat && (
             <div className="flex items-center gap-2 px-4 py-2 rounded-xl border" style={{background:'#f0f9ff',borderColor:'#bae6fd'}}>
               <span className="text-[8px] font-bold uppercase" style={{color:'var(--fuel)'}}>Subcategoría:</span>
               <span className="text-xs font-bold uppercase" style={{color:'var(--navy)'}}>{subCat}</span>
-              <button type="button" onClick={()=>setSubCat('')} className="ml-auto text-xs" style={{color:'var(--oxford)'}}>✕</button>
+              <button type="button" onClick={() => setSubCat('')} className="ml-auto text-xs" style={{color:'var(--oxford)'}}>✕</button>
             </div>
           )}
 
-          {subCat==='varios'&&(
+          {subCat==='varios' && (
             <div>
               <label className="text-[8px] font-bold uppercase tracking-wider mb-1 block" style={{color:'var(--oxford)'}}>Descripción (obligatorio)</label>
-              <input value={variosDesc} onChange={e=>setVariosDesc(e.target.value)} required placeholder="Describí el gasto..." className="inp w-full p-3.5" />
+              <input value={variosDesc} onChange={e => setVariosDesc(e.target.value)} required placeholder="Describí el gasto..." className="inp w-full p-3.5" />
             </div>
           )}
 
-          {/* Fuel-specific fields */}
-          {tipoGasto==='combustible'&&(
+          {tipoGasto==='combustible' && (
             <div className="rounded-xl p-4 space-y-3 border" style={{background:'#f0f9ff',borderColor:'#bae6fd'}}>
               <p className="text-[8px] font-bold uppercase tracking-wider" style={{color:'var(--fuel)'}}>⛽ Datos de Carga</p>
               <div className="grid grid-cols-2 gap-3">
@@ -1392,19 +1813,36 @@ function ExpenseModal({trucks,onSubmit,onClose,history}) {
                   <input name="km_registro" type="number" required placeholder={lastKm>0?`> ${lastKm}`:'0'}
                     className="inp w-full p-2.5 text-sm"
                     style={kmError?{borderColor:'var(--danger)'}:{}}
-                    onChange={e=>validateKm(e.target.value)} />
+                    onChange={e => validateKm(e.target.value)} />
                   {kmError&&<p className="text-[7px] mt-0.5 font-semibold" style={{color:'var(--danger)'}}>{kmError}</p>}
                 </div>
+              </div>
+              {/* Ticket photo */}
+              <div>
+                <label className="text-[7px] font-bold uppercase tracking-wider mb-1 block" style={{color:'var(--oxford)'}}>Foto del Ticket (recomendado)</label>
+                {ticketFile
+                  ? <div className="flex items-center gap-2 p-2 rounded-xl border" style={{background:'#f0fdf4',borderColor:'#bbf7d0'}}>
+                      <Camera size={13} style={{color:'var(--success)'}}/>
+                      <span className="text-[9px] flex-1 truncate">{ticketFile.name}</span>
+                      <button type="button" onClick={()=>setTicketFile(null)}><X size={11} style={{color:'var(--oxford)'}}/></button>
+                    </div>
+                  : <label className="flex items-center gap-2 p-2 rounded-xl border-2 border-dashed cursor-pointer"
+                      style={{borderColor:'var(--mist)',background:'var(--ice)'}}>
+                      <Camera size={14} style={{color:'var(--oxford)'}}/>
+                      <span className="text-[9px]" style={{color:'var(--oxford)'}}>Subir foto del ticket</span>
+                      <input type="file" accept="image/*" capture="environment" className="hidden"
+                        onChange={e=>{if(e.target.files?.[0])setTicketFile(e.target.files[0]);}} />
+                    </label>
+                }
               </div>
             </div>
           )}
 
-          {/* Amount */}
           <div className="relative">
             <span className="absolute left-5 top-1/2 -translate-y-1/2 text-2xl font-black" style={{color:'var(--oxford)'}}>$</span>
             <input name="amount" type="number" step="0.01" required placeholder="0.00"
-              className="w-full p-7 rounded-2xl text-center text-4xl font-black text-white outline-none focus:ring-4"
-              style={{background:'linear-gradient(135deg,var(--navy),var(--navy-3))',focusRingColor:'rgba(37,99,235,.3)'}} />
+              className="w-full p-7 rounded-2xl text-center text-4xl font-black text-white outline-none"
+              style={{background:'linear-gradient(135deg,var(--navy),var(--navy-3))'}} />
           </div>
 
           <div className="flex gap-3">
@@ -1421,61 +1859,11 @@ function ExpenseModal({trucks,onSubmit,onClose,history}) {
   );
 }
 
-// ─── TRUCK FORM MODAL ─────────────────────────────────────────────────────────
-function TruckFormModal({title,initial={},onSubmit,onClose}) {
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overlay">
-      <div className="modal w-full max-w-lg p-7 max-h-[90vh] overflow-y-auto">
-        <h2 className="font-display font-black text-2xl uppercase mb-5" style={{color:'var(--navy)'}}>{title}</h2>
-        <form onSubmit={onSubmit} className="space-y-4">
-          {!initial.id
-            ?<input name="patente" placeholder="PATENTE (EJ: AA123BB)" required defaultValue={initial.patente||''} className="inp w-full p-3.5 font-bold uppercase" />
-            :<div className="p-3.5 rounded-xl font-bold uppercase text-sm" style={{background:'var(--ice)',color:'var(--oxford)',border:'1.5px solid var(--mist)'}}>{initial.patente}</div>
-          }
-          <input name="chofer" placeholder="Nombre del chofer" required defaultValue={initial.chofer||''} className="inp w-full p-3.5" />
-          <input name="km" type="number" placeholder="KM Actual" defaultValue={initial.kmActual||''} className="inp w-full p-3.5" />
-
-          <div className="pt-3 border-t" style={{borderColor:'var(--mist)'}}>
-            <p className="text-[8px] font-bold uppercase tracking-wider mb-3" style={{color:'var(--oxford)'}}>Gastos Fijos Mensuales</p>
-            <div className="grid grid-cols-3 gap-3">
-              {[{name:'seguro',label:'Seguro ($)',val:initial.seguro},{name:'vtv',label:'VTV ($)',val:initial.vtv_costo},{name:'muni',label:'Hab. Mun. ($)',val:initial.muni_costo}].map(f=>(
-                <div key={f.name}>
-                  <label className="text-[7px] font-bold uppercase block mb-1" style={{color:'var(--oxford)'}}>{f.label}</label>
-                  <input name={f.name} type="number" placeholder="0" defaultValue={f.val||''} className="inp w-full p-2.5 text-xs" />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="pt-3 border-t" style={{borderColor:'var(--mist)'}}>
-            <p className="text-[8px] font-bold uppercase tracking-wider mb-3" style={{color:'var(--oxford)'}}>Fechas de Vencimiento</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-[7px] font-bold uppercase block mb-1" style={{color:'var(--oxford)'}}>Venc. Seguro</label><input name="seguro_venc" type="date" defaultValue={initial.seguro_venc||''} className="inp w-full p-2.5 text-xs" /></div>
-              <div><label className="text-[7px] font-bold uppercase block mb-1" style={{color:'var(--oxford)'}}>Venc. VTV</label><input name="vtv_venc" type="date" defaultValue={initial.vtv_venc||''} className="inp w-full p-2.5 text-xs" /></div>
-            </div>
-          </div>
-
-          {initial.editadoPor&&(
-            <div className="rounded-xl p-3 text-[8px] font-medium border" style={{background:'#eff6ff',borderColor:'#bfdbfe',color:'var(--accent)'}}>
-              ✏️ Última edición por <span className="font-bold">{initial.editadoPor}</span> — {new Date(initial.editadoAt).toLocaleString('es-AR')}
-            </div>
-          )}
-
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onClose} className="flex-1 p-3.5 rounded-xl font-bold text-xs uppercase transition-all" style={{background:'var(--ice)',color:'var(--oxford)'}}>Cancelar</button>
-            <button type="submit" className="flex-1 p-3.5 text-white rounded-xl font-bold text-xs uppercase"
-              style={{background:'linear-gradient(135deg,#1d4ed8,#2563eb)',boxShadow:'0 8px 22px rgba(37,99,235,.3)'}}>Guardar</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 // ─── EDIT EXPENSE MODAL ───────────────────────────────────────────────────────
-function EditExpenseModal({item,fmt,onSave,onClose}) {
-  const [newAmount,setNewAmount] = useState(String(item.amount));
-  const [motivo,setMotivo]       = useState('');
+
+function EditExpenseModal({item,fmt,onSave,onClose}: any) {
+  const [newAmount, setNewAmount] = useState(String(item.amount));
+  const [motivo,    setMotivo]    = useState('');
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 overlay">
       <div className="modal w-full max-w-md p-7">
@@ -1488,19 +1876,19 @@ function EditExpenseModal({item,fmt,onSave,onClose}) {
           </div>
           <div>
             <label className="text-[8px] font-bold uppercase block mb-1" style={{color:'var(--oxford)'}}>Nuevo monto ($)</label>
-            <input type="number" value={newAmount} onChange={e=>setNewAmount(e.target.value)}
-              className="w-full p-4 rounded-2xl text-2xl font-black text-center text-white outline-none focus:ring-4"
+            <input type="number" value={newAmount} onChange={e => setNewAmount(e.target.value)}
+              className="w-full p-4 rounded-2xl text-2xl font-black text-center text-white outline-none"
               style={{background:'linear-gradient(135deg,var(--navy),var(--navy-3))'}} />
           </div>
           <div>
             <label className="text-[8px] font-bold uppercase block mb-1" style={{color:'var(--oxford)'}}>Motivo del cambio</label>
-            <input type="text" value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Ej: Error de carga, ajuste..." className="inp w-full p-3.5" />
+            <input type="text" value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ej: Error de carga, ajuste..." className="inp w-full p-3.5" />
           </div>
-          {item.historialEdiciones?.length>0&&(
+          {item.historialEdiciones?.length>0 && (
             <div className="rounded-xl p-3 border" style={{background:'var(--ice)',borderColor:'var(--mist)'}}>
               <p className="text-[8px] font-bold uppercase mb-2 flex items-center gap-1" style={{color:'var(--oxford)'}}><History size={10}/> Historial</p>
               <div className="space-y-2 max-h-28 overflow-y-auto">
-                {[...item.historialEdiciones].reverse().map((ed,i)=>(
+                {[...item.historialEdiciones].reverse().map((ed:any,i:number) => (
                   <div key={i} className="text-[8px] border-l-2 pl-2" style={{borderColor:'var(--accent)',color:'var(--steel)'}}>
                     <span className="font-bold" style={{color:'var(--accent)'}}>{ed.editadoPor}</span> cambió{' '}
                     <span className="line-through" style={{color:'var(--mist)'}}>{fmt(ed.montoAnterior)}</span> → <span className="font-bold">{fmt(ed.montoNuevo)}</span>
@@ -1514,7 +1902,7 @@ function EditExpenseModal({item,fmt,onSave,onClose}) {
         </div>
         <div className="flex gap-3 mt-5">
           <button onClick={onClose} className="flex-1 p-3.5 rounded-xl font-bold text-xs uppercase" style={{background:'var(--ice)',color:'var(--oxford)'}}>Cancelar</button>
-          <button onClick={()=>onSave(item,newAmount,motivo)} className="flex-1 p-3.5 text-white rounded-xl font-bold text-xs uppercase"
+          <button onClick={() => onSave(item,newAmount,motivo)} className="flex-1 p-3.5 text-white rounded-xl font-bold text-xs uppercase"
             style={{background:'linear-gradient(135deg,#1d4ed8,#2563eb)'}}>Guardar Cambio</button>
         </div>
       </div>
@@ -1523,60 +1911,72 @@ function EditExpenseModal({item,fmt,onSave,onClose}) {
 }
 
 // ─── HISTORY TABLE ────────────────────────────────────────────────────────────
-function HistoryTable({allPeriod,trucks,truckFilter,onTruckFilter,onBaja,onEdit,fmt}) {
-  const [showBaja,setShowBaja] = useState(false);
-  const displayed = allPeriod.filter(h=>{
+
+function HistoryTable({allPeriod,trucks,truckFilter,onTruckFilter,onBaja,onEdit,fmt,onExport}: any) {
+  const [showBaja, setShowBaja] = useState(false);
+  const displayed = allPeriod.filter((h:any) => {
     const okBaja  = showBaja?true:(h.status!=='baja');
     const okTruck = truckFilter?h.truckId===truckFilter:true;
     return okBaja&&okTruck;
   });
+  const total = displayed.filter((h:any)=>h.status!=='baja').reduce((a:number,h:any)=>a+Number(h.amount),0);
+
   return (
     <div className="card overflow-hidden">
       <div className="p-4 border-b flex flex-wrap items-center justify-between gap-3" style={{borderColor:'var(--mist)',background:'var(--ice)'}}>
-        <h2 className="font-display font-black uppercase text-sm" style={{color:'var(--navy)'}}>Últimos Movimientos</h2>
+        <div>
+          <h2 className="font-display font-black uppercase text-sm" style={{color:'var(--navy)'}}>Movimientos</h2>
+          <p className="font-mono text-[10px] font-bold mt-0.5" style={{color:'var(--accent)'}}>
+            {displayed.filter((h:any)=>h.status!=='baja').length} registros · {fmt(total)}
+          </p>
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <select value={truckFilter} onChange={e=>onTruckFilter(e.target.value)} className="inp text-xs px-3 py-2 outline-none">
             <option value="">Todas las unidades</option>
-            {trucks.map(t=><option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
+            {trucks.map((t:any) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
           </select>
           <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer whitespace-nowrap" style={{color:'var(--oxford)'}}>
             <input type="checkbox" checked={showBaja} onChange={e=>setShowBaja(e.target.checked)} className="rounded" style={{accentColor:'var(--accent)'}} />
             Ver bajas
           </label>
+          {/* XLS button moved here, closer to the data */}
+          <button onClick={onExport} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-bold border transition-all"
+            style={{color:'var(--success)',borderColor:'#bbf7d0',background:'#f0fdf4'}}>
+            ↓ Exportar XLS
+          </button>
         </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px]">
           <thead className="border-b" style={{background:'var(--ice)',borderColor:'var(--mist)'}}>
             <tr>
-              {['Fecha','Unidad','Concepto','Monto','Acciones'].map((h,i)=>(
+              {['Fecha','Unidad','Concepto','Monto','Acciones'].map((h,i) => (
                 <th key={h} className={`px-4 py-3 text-[8px] font-bold uppercase tracking-wider ${i===3?'text-right':i===4?'text-center':'text-left'}`} style={{color:'var(--oxford)'}}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y" style={{borderColor:'var(--ice)'}}>
-            {displayed.map(item=>{
-              const esBaja=item.status==='baja';
-              const editado=item.ultimaEdicion;
+            {displayed.map((item:any) => {
+              const esBaja  = item.status==='baja';
+              const editado = item.ultimaEdicion;
               return (
                 <tr key={item.id} className={`history-row transition-colors ${esBaja?'opacity-50':''}`}>
                   <td className="px-4 py-3 text-[9px] whitespace-nowrap font-medium" style={{color:'var(--oxford)'}}>{item.date}</td>
                   <td className="px-4 py-3 font-display font-bold uppercase text-xs" style={{color:'var(--navy)'}}>{item.truck}</td>
                   <td className="px-4 py-3">
-                    {esBaja?(
-                      <div><span className="line-through text-[9px]" style={{color:'var(--oxford)'}}>{item.categoryLabel}</span><p className="text-[7px] font-bold mt-0.5" style={{color:'var(--danger)'}}>Baja: {item.bajaBy}</p></div>
-                    ):(
-                      <div>
-                        <span className={`px-2 py-0.5 rounded-lg text-[8px] font-bold uppercase border ${isFuel(item.categoryLabel)?'':''}` }
-                          style={isFuel(item.categoryLabel)?{background:'#f0f9ff',color:'var(--fuel)',borderColor:'#bae6fd'}:{background:'var(--ice)',color:'var(--steel)',borderColor:'var(--mist)'}}>
-                          {item.categoryLabel}
-                        </span>
-                        {isFuel(item.categoryLabel)&&item.litros>0&&(
-                          <span className="ml-1.5 text-[7px] font-mono font-bold" style={{color:'var(--fuel)'}}>{item.litros}L · {item.km_registro?.toLocaleString('es-AR')} km</span>
-                        )}
-                        {editado&&<p className="text-[7px] font-bold mt-0.5 flex items-center gap-1" style={{color:'var(--accent)'}}><Edit2 size={7}/> {editado.editadoPor}{editado.motivo&&<span style={{color:'var(--oxford)'}}>— {editado.motivo}</span>}</p>}
-                      </div>
-                    )}
+                    {esBaja
+                      ? <div><span className="line-through text-[9px]" style={{color:'var(--oxford)'}}>{item.categoryLabel}</span><p className="text-[7px] font-bold mt-0.5" style={{color:'var(--danger)'}}>Baja: {item.bajaBy}</p></div>
+                      : <div>
+                          <span className="px-2 py-0.5 rounded-lg text-[8px] font-bold uppercase border"
+                            style={isFuel(item.categoryLabel)?{background:'#f0f9ff',color:'var(--fuel)',borderColor:'#bae6fd'}:{background:'var(--ice)',color:'var(--steel)',borderColor:'var(--mist)'}}>
+                            {item.categoryLabel}
+                          </span>
+                          {isFuel(item.categoryLabel)&&(item.litros||0)>0 && (
+                            <span className="ml-1.5 text-[7px] font-mono font-bold" style={{color:'var(--fuel)'}}>{item.litros}L · {item.km_registro?.toLocaleString('es-AR')} km</span>
+                          )}
+                          {editado&&<p className="text-[7px] font-bold mt-0.5 flex items-center gap-1" style={{color:'var(--accent)'}}><Edit2 size={7}/> {editado.editadoPor}{editado.motivo&&<span style={{color:'var(--oxford)'}}> — {editado.motivo}</span>}</p>}
+                        </div>
+                    }
                   </td>
                   <td className={`px-4 py-3 text-right font-mono font-bold text-xs ${esBaja?'line-through':''}`} style={{color:esBaja?'var(--mist)':'var(--navy)'}}>
                     {fmt(item.amount)}
@@ -1585,8 +1985,8 @@ function HistoryTable({allPeriod,trucks,truckFilter,onTruckFilter,onBaja,onEdit,
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
                       {!esBaja&&<>
-                        <button onClick={()=>onEdit(item)} className="p-1.5 rounded-lg transition-all hover:bg-blue-50" style={{color:'var(--mist)'}}><Edit2 size={12}/></button>
-                        <button onClick={()=>onBaja(item)} className="p-1.5 rounded-lg transition-all hover:bg-red-50"  style={{color:'var(--mist)'}}><Ban size={12}/></button>
+                        <button onClick={() => onEdit(item)} className="p-1.5 rounded-lg transition-all hover:bg-blue-50" style={{color:'var(--mist)'}}><Edit2 size={12}/></button>
+                        <button onClick={() => onBaja(item)} className="p-1.5 rounded-lg transition-all hover:bg-red-50"  style={{color:'var(--mist)'}}><Ban size={12}/></button>
                       </>}
                       {esBaja&&<span className="text-[7px] font-bold uppercase" style={{color:'var(--danger)'}}>Baja</span>}
                     </div>
@@ -1602,14 +2002,170 @@ function HistoryTable({allPeriod,trucks,truckFilter,onTruckFilter,onBaja,onEdit,
   );
 }
 
+// ─── DRIVER VIEW ──────────────────────────────────────────────────────────────
+
+function DriverView({trucks, userEmail, onSubmit, onSignOut}: any) {
+  const [step,       setStep]       = useState<'select'|'fuel'|'maint'|'done'>('select');
+  const [saving,     setSaving]     = useState(false);
+  const [ticketFile, setTicketFile] = useState<File|null>(null);
+  const [kmError,    setKmError]    = useState('');
+
+  const handleFuel = async (e: React.FormEvent<HTMLFormElement>) => {
+    if (kmError) return;
+    e.preventDefault(); setSaving(true);
+    await onSubmit(e,{category:'combustible',fotoTicket:ticketFile});
+    setSaving(false); setStep('done');
+  };
+
+  const handleMaint = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault(); setSaving(true);
+    const fd = new FormData(e.currentTarget);
+    const subCat    = fd.get('subCat')    as string;
+    const variosDesc = fd.get('variosDesc') as string;
+    await onSubmit(e,{category:subCat||'varios',variosDesc:subCat==='varios'?variosDesc:''});
+    setSaving(false); setStep('done');
+  };
+
+  if (step==='done') return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center" style={{background:'var(--ice)'}}>
+      <CheckCircle2 size={56} style={{color:'var(--success)'}} className="mb-4" />
+      <h2 className="font-display font-black text-2xl uppercase" style={{color:'var(--navy)'}}>¡Registrado!</h2>
+      <p className="text-sm mt-2 mb-8" style={{color:'var(--oxford)'}}>El gasto fue guardado correctamente.</p>
+      <button onClick={() => { setStep('select'); setTicketFile(null); setKmError(''); }}
+        className="px-8 py-4 text-white rounded-2xl font-bold uppercase text-sm"
+        style={{background:'linear-gradient(135deg,#1d4ed8,#2563eb)'}}>
+        Nuevo Registro
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen" style={{background:'var(--ice)'}}>
+      <div className="p-5 pb-4 flex items-center justify-between" style={{background:'var(--navy)'}}>
+        <div>
+          <p className="text-[8px] font-bold uppercase tracking-widest mb-0.5" style={{color:'rgba(255,255,255,.4)'}}>{userEmail}</p>
+          <h1 className="font-display font-black text-2xl uppercase text-white">Cargar Gasto</h1>
+        </div>
+        <button onClick={onSignOut} className="p-2 rounded-xl" style={{color:'rgba(255,255,255,.4)'}}><LogOut size={16}/></button>
+      </div>
+
+      <div className="p-4 space-y-4">
+        {step==='select' && (
+          <div className="space-y-3 pt-2">
+            {[
+              {key:'fuel',  emoji:'⛽', title:'Combustible',   sub:'Registrar carga con litros y KM', color:'#bae6fd', bg:'white'},
+              {key:'maint', emoji:'🔧', title:'Mantenimiento', sub:'Mecánico, gomas, varios...',       color:'var(--mist)', bg:'white'},
+            ].map(item => (
+              <button key={item.key} onClick={() => setStep(item.key as any)}
+                className="w-full flex items-center gap-4 p-5 rounded-2xl border-2 transition-all text-left"
+                style={{background:item.bg, borderColor:item.color}}>
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shrink-0" style={{background:'var(--ice)'}}>{item.emoji}</div>
+                <div className="flex-1">
+                  <p className="font-display font-black text-lg uppercase" style={{color:'var(--navy)'}}>{item.title}</p>
+                  <p className="text-[10px]" style={{color:'var(--oxford)'}}>{item.sub}</p>
+                </div>
+                <ChevronRight size={18} style={{color:'var(--mist)'}} />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {step==='fuel' && (
+          <form onSubmit={handleFuel} className="space-y-4">
+            <button type="button" onClick={() => setStep('select')} className="text-[9px] font-bold uppercase tracking-wider" style={{color:'var(--oxford)'}}>← Volver</button>
+            <select name="truckId" required className="inp w-full p-4 text-base font-bold">
+              <option value="">Seleccioná tu camión...</option>
+              {trucks.map((t:any) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
+            </select>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="card p-4">
+                <p className="text-[8px] font-bold uppercase mb-2" style={{color:'var(--oxford)'}}>KM Odómetro *</p>
+                <input name="km_registro" type="number" inputMode="numeric" placeholder="0" required
+                  className="w-full font-data text-2xl font-black outline-none bg-transparent" style={{color:'var(--navy)'}}
+                  onChange={e => {
+                    const t = trucks.find((tr:any) => tr.id===(document.querySelector('[name=truckId]') as any)?.value);
+                    const last = t?.kmActual||0;
+                    if (parseFloat(e.target.value)<=last) setKmError(`Debe ser > ${last.toLocaleString()} km`);
+                    else setKmError('');
+                  }} />
+                {kmError&&<p className="text-[7px] mt-1 font-bold" style={{color:'var(--danger)'}}>{kmError}</p>}
+              </div>
+              <div className="card p-4">
+                <p className="text-[8px] font-bold uppercase mb-2" style={{color:'var(--oxford)'}}>Litros *</p>
+                <input name="litros" type="number" inputMode="decimal" step="0.01" placeholder="0.00" required
+                  className="w-full font-data text-2xl font-black outline-none bg-transparent" style={{color:'#0ea5e9'}} />
+              </div>
+            </div>
+            <div className="card p-5">
+              <p className="text-[8px] font-bold uppercase mb-2" style={{color:'var(--oxford)'}}>Monto Total ($) *</p>
+              <input name="amount" type="number" inputMode="decimal" step="0.01" placeholder="0.00" required
+                className="w-full font-data text-4xl font-black outline-none bg-transparent" style={{color:'var(--navy)'}} />
+            </div>
+            <div className="card p-4">
+              <p className="text-[8px] font-bold uppercase mb-3" style={{color:'var(--oxford)'}}>Foto del Ticket</p>
+              {ticketFile
+                ? <div className="flex items-center gap-2 p-2 rounded-xl border" style={{background:'#f0fdf4',borderColor:'#bbf7d0'}}>
+                    <Camera size={14} style={{color:'var(--success)'}}/>
+                    <span className="text-[9px] flex-1 truncate">{ticketFile.name}</span>
+                    <button type="button" onClick={()=>setTicketFile(null)}><X size={11}/></button>
+                  </div>
+                : <label className="flex flex-col items-center gap-2 p-5 rounded-2xl border-2 border-dashed cursor-pointer" style={{borderColor:'var(--mist)',background:'var(--ice)'}}>
+                    <Camera size={24} style={{color:'var(--oxford)'}}/>
+                    <p className="text-[10px] font-bold uppercase" style={{color:'var(--oxford)'}}>Sacar foto</p>
+                    <input type="file" accept="image/*" capture="environment" className="hidden"
+                      onChange={e=>{if(e.target.files?.[0])setTicketFile(e.target.files[0]);}} />
+                  </label>
+              }
+            </div>
+            <button type="submit" disabled={saving||Boolean(kmError)}
+              className="w-full py-5 text-white rounded-2xl font-display font-black text-lg uppercase disabled:opacity-40"
+              style={{background:'linear-gradient(135deg,#1d4ed8,#2563eb)',boxShadow:'0 10px 28px rgba(37,99,235,.4)'}}>
+              {saving?<span className="flex items-center justify-center gap-2"><Loader2 size={18} className="animate-spin"/>Guardando...</span>:'Confirmar Carga'}
+            </button>
+          </form>
+        )}
+
+        {step==='maint' && (
+          <form onSubmit={handleMaint} className="space-y-4">
+            <button type="button" onClick={() => setStep('select')} className="text-[9px] font-bold uppercase tracking-wider" style={{color:'var(--oxford)'}}>← Volver</button>
+            <select name="truckId" required className="inp w-full p-4 text-base font-bold">
+              <option value="">Seleccioná tu camión...</option>
+              {trucks.map((t:any) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
+            </select>
+            <div>
+              <p className="text-[8px] font-bold uppercase mb-2" style={{color:'var(--oxford)'}}>Tipo de trabajo *</p>
+              <select name="subCat" required className="inp w-full p-4 text-base font-bold">
+                <option value="">Seleccionar...</option>
+                {[['mecanico','Mecánico'],['elastiquero','Elastiquero'],['chapista','Chapista'],['tapicero','Tapicero'],
+                  ['gomeria','Gomería'],['electricista','Electricista'],['neumaticos','Neumáticos'],['taller','Taller General'],['varios','Otros / Varios']
+                ].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            <textarea name="variosDesc" placeholder="Descripción del trabajo..." rows={3} className="inp w-full p-3 text-sm resize-none" />
+            <div className="card p-5">
+              <p className="text-[8px] font-bold uppercase mb-2" style={{color:'var(--oxford)'}}>Monto Total ($) *</p>
+              <input name="amount" type="number" inputMode="decimal" step="0.01" placeholder="0.00" required
+                className="w-full font-data text-4xl font-black outline-none bg-transparent" style={{color:'var(--navy)'}} />
+            </div>
+            <button type="submit" disabled={saving}
+              className="w-full py-5 text-white rounded-2xl font-display font-black text-lg uppercase disabled:opacity-40"
+              style={{background:'linear-gradient(135deg,var(--navy),var(--navy-3))',boxShadow:'0 10px 28px rgba(11,17,32,.35)'}}>
+              {saving?<span className="flex items-center justify-center gap-2"><Loader2 size={18} className="animate-spin"/>Guardando...</span>:'Registrar Gasto'}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── SMALL COMPONENTS ────────────────────────────────────────────────────────
-function SubKpi({label,value,Icon,accent,bg,border,suffix,mono}) {
+
+function SubKpi({label,value,Icon,accent,bg,border,suffix,mono}: any) {
   return (
     <div className="kpi-sub p-5 flex flex-col justify-between" style={{minHeight:130}}>
       <div className="flex items-center justify-between mb-3">
-        <div className="p-2 rounded-xl" style={{background:bg,border:`1px solid ${border}`}}>
-          <Icon size={13} style={{color:accent}} />
-        </div>
+        <div className="p-2 rounded-xl" style={{background:bg,border:`1px solid ${border}`}}><Icon size={13} style={{color:accent}} /></div>
         {suffix&&<span className="text-[7px] font-bold uppercase tracking-widest" style={{color:'var(--mist)'}}>{suffix}</span>}
       </div>
       <div>
@@ -1620,7 +2176,7 @@ function SubKpi({label,value,Icon,accent,bg,border,suffix,mono}) {
   );
 }
 
-function BarTooltip({active,payload,fmt}) {
+function BarTooltip({active,payload,fmt}: any) {
   if (!active||!payload?.length) return null;
   return (
     <div className="p-3 rounded-xl shadow-2xl text-white text-xs" style={{background:'var(--navy)'}}>
@@ -1631,9 +2187,9 @@ function BarTooltip({active,payload,fmt}) {
   );
 }
 
-function Notification({banner}) {
+function Notification({banner}: any) {
   if (!banner) return null;
-  const isErr=banner.type==='error';
+  const isErr = banner.type==='error';
   return (
     <div className="fixed top-4 right-4 z-[200] text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 max-w-xs anim-up"
       style={{background:isErr?'linear-gradient(135deg,#b91c1c,#dc2626)':'linear-gradient(135deg,var(--navy),var(--navy-3))',border:`1px solid ${isErr?'#f87171':'rgba(37,99,235,.3)'}`,boxShadow:isErr?'0 8px 28px rgba(185,28,28,.4)':'0 8px 28px rgba(0,0,0,.4)'}}>
@@ -1656,10 +2212,10 @@ function LoadingScreen() {
   );
 }
 
-function LoginComponent({onLogin}) {
-  const [showPass,setShowPass] = useState(false);
-  const [loading,setLoading]  = useState(false);
-  const submit = async (e) => { setLoading(true); await onLogin(e); setLoading(false); };
+function LoginComponent({onLogin}: any) {
+  const [showPass, setShowPass] = useState(false);
+  const [loading,  setLoading]  = useState(false);
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => { setLoading(true); await onLogin(e); setLoading(false); };
 
   return (
     <div className="login-bg min-h-screen flex items-center justify-center p-4">
@@ -1686,7 +2242,7 @@ function LoginComponent({onLogin}) {
             <label className="text-[8px] font-bold uppercase tracking-widest block mb-1.5" style={{color:'rgba(255,255,255,.38)'}}>Contraseña</label>
             <div className="relative">
               <input type={showPass?'text':'password'} name="password" placeholder="••••••••" required className="login-input w-full p-3.5 rounded-2xl text-sm" />
-              <button type="button" onClick={()=>setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 transition-colors hover:text-white" style={{color:'rgba(255,255,255,.28)'}}>
+              <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 transition-colors hover:text-white" style={{color:'rgba(255,255,255,.28)'}}>
                 {showPass?<EyeOff size={15}/>:<Eye size={15}/>}
               </button>
             </div>
