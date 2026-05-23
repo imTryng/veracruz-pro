@@ -353,7 +353,7 @@ export default function App() {
   // └─────────────────────────────────────────────────────────────────────────────┘
 
   // COLOCAR AQUÍ LA URL DE GOOGLE SHEETS PUBLICADA COMO CSV
-  const GOOGLE_SHEET_CSV_URL = null; // https://docs.google.com/spreadsheets/d/e/2PACX-1vRGd3hd3Ibuo__v1UTYJVCdO-gtgK0JxiFNkachDvt1a2YSMGU5z4YlGfYiANjZYS0G0TqFeFGEF5t3/pub?gid=0&single=true&output=csv
+  const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRGd3hd3Ibuo__v1UTYJVCdO-gtgK0JxiFNkachDvt1a2YSMGU5z4YlGfYiANjZYS0G0TqFeFGEF5t3/pub?gid=0&single=true&output=csv";
 
   const fetchExcelData = async () => {
     setVendedoresLoading(true);
