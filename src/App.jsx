@@ -359,14 +359,16 @@ export default function App() {
     setVendedoresLoading(true);
     try {
       if (GOOGLE_SHEET_CSV_URL) {
-        // ── Fetch real desde Google Sheets ──────────────────────────────────────
-        const res  = await fetch(GOOGLE_SHEET_CSV_URL);
+        const res = await fetch(GOOGLE_SHEET_CSV_URL);
         const text = await res.text();
-        const rows = text.trim().split('\n');
         
-        if (rows.length < 2) return;
+        // 1. Detectar automáticamente si usa coma o punto y coma
+        const firstLine = text.split('\n')[0];
+        const separator = firstLine.includes(';') ? ';' : ',';
+        
+        const rows = text.trim().split('\n').slice(1); // Omitir encabezado
 
-        // Lógica firme para limpiar números con formato argentino
+        // Lógica interna para limpiar cualquier formato de número argentino
         const cleanNum = (str) => {
           if (!str) return 0;
           let clean = String(str).replace(/[\s"$%]/g, '');
@@ -378,30 +380,25 @@ export default function App() {
           return parseFloat(clean) || 0;
         };
 
-        const parsed = rows.slice(1).map((row, index) => {
-          const columns = row.split(';');
-          
-          // Ignorar la fila de cabecera en el slice si aparece de nuevo, filas vacías o cortadas
-          if (columns.length < 4 || (columns[0] && columns[0].toUpperCase().includes('VENDEDOR'))) return null;
+        const parsed = rows.map(row => {
+          // Separar usando el separador detectado automáticamente
+          const columns = row.split(separator);
+          if (columns.length < 4) return null;
 
-          const rechazoPorcentaje = cleanNum(columns[6]);
-          const pedidosAcumulados = cleanNum(columns[7]);
-
-          // Mapeamos las posiciones fijas al formato que requiere la UI
           return {
-            id: String(index + 1),
+            id: Math.random().toString(36).substr(2, 9),
             nombre: columns[0]?.replace(/^"|"$/g, '').trim() || 'Desconocido', // vendedor
-            zona: 'General',
+            zona: 'Distribución', // Zona fija para el diseño
             clientesActivos: cleanNum(columns[1]),
             objetivoVolumen: cleanNum(columns[2]),
             ventaActual: cleanNum(columns[3]),
-            coberturaPct: cleanNum(columns[4]), // coberturaPorcentaje
-            montoRechazado: cleanNum(columns[5]), // rechazoAcumulado
-            rechazoPct: rechazoPorcentaje,
-            pedidosTotales: pedidosAcumulados,
-            pedidosRechazados: Math.round((rechazoPorcentaje / 100) * pedidosAcumulados) || 0
+            coberturaPorcentaje: cleanNum(columns[4]),
+            rechazoAcumulado: cleanNum(columns[5]),
+            rechazoPorcentaje: cleanNum(columns[6]),
+            pedidosTotales: cleanNum(columns[7]), // Sincronizado con el componente
+            pedidosRechazados: cleanNum(columns[5]) > 0 ? Math.round(cleanNum(columns[7]) * (cleanNum(columns[6])/100)) : 0
           };
-        }).filter(v => v !== null && !v.nombre.toUpperCase().includes('TOTAL GENERAL')); // Evita vacíos y "Total general"
+        }).filter(Boolean); // Evita vacíos
 
         setVendedoresData(parsed);
       } else {
@@ -416,7 +413,7 @@ export default function App() {
         ]);
       }
     } catch (err) {
-      console.error('fetchExcelData error:', err);
+      console.error('Error al cargar vendedores:', err);
     } finally {
       setVendedoresLoading(false);
     }
