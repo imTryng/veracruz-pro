@@ -369,23 +369,21 @@ export default function App() {
         // 1. Extraer y limpiar los encabezados pasándolos a mayúsculas
         const headers = rows[0].split(';').map(h => h.replace(/^"|"$/g, '').trim().toUpperCase());
 
-        // 2. Buscar índices de columnas por nombres aproximados
-        const idxVendedor = headers.findIndex(h => h.includes('VENDEDOR'));
+        // 2. Buscar índices de columnas por nombres exactos
+        const idxVendedor        = headers.findIndex(h => h.includes('VENDEDOR'));
         const idxClientesActivos = headers.findIndex(h => h.includes('CLIENTES ACTIVOS'));
-        const idxObjetivo = headers.findIndex(h => h.includes('OBJETIVO'));
-        const idxAvance = headers.findIndex(h => h.includes('AVANCE'));
-        const idxPctAvance = headers.findIndex(h => h.includes('% AVANCE') || h.includes('%AVANCE') || h.includes('AVANCE %'));
-        const idxRechazo = headers.findIndex(h => h.includes('RECHAZO ACUMUL') || h.includes('RECHAZO'));
-        const idxPctRechazo = headers.findIndex(h => h.includes('RECHA DEL MES') || h.includes('RECHAZO %'));
-        const idxPedidos = headers.findIndex(h => h.includes('PEDIDOS'));
+        const idxObjetivo        = headers.findIndex(h => h.includes('OBJETIVO VOL'));
+        const idxAvance          = headers.findIndex(h => h.includes('AVANCE VOL'));
+        const idxCobertura       = headers.findIndex(h => h.includes('COBERTURA %'));
+        const idxRechazoAcumul   = headers.findIndex(h => h.includes('RECHAZO ACUMUL'));
+        const idxPctRechazo      = headers.findIndex(h => h.includes('% RECHA DEL MES'));
+        const idxPedidos         = headers.findIndex(h => h.includes('PEDIDOS ACUMULAD'));
 
         // Lector de números que limpia formatos numéricos de Argentina
         const parseArgNumber = (val) => {
           if (!val) return 0;
-          // Quita espacios, comillas y el signo $
-          let clean = val.replace(/[\s"$]/g, '');
-          // Si tiene porcentaje %, lo removemos
-          clean = clean.replace('%', '');
+          // Quita espacios, comillas, el signo $ y el porcentaje %
+          let clean = String(val).replace(/[\s"$%]/g, '');
           // Cambiamos puntos de miles por vacío y comas decimales por punto para JavaScript
           if (clean.includes(',') && clean.includes('.')) {
             clean = clean.replace(/\./g, '').replace(',', '.');
@@ -401,7 +399,7 @@ export default function App() {
           
           const getVal = (idx) => idx !== -1 && cols[idx] !== undefined ? cols[idx] : '';
 
-          const pctRechazo = parseArgNumber(getVal(idxPctRechazo));
+          const pctRechazo   = parseArgNumber(getVal(idxPctRechazo));
           const totalPedidos = parseArgNumber(getVal(idxPedidos));
 
           // 4. Mapear dinámicamente usando los índices encontrados
@@ -412,13 +410,13 @@ export default function App() {
             clientesActivos: parseArgNumber(getVal(idxClientesActivos)),
             objetivoVolumen: parseArgNumber(getVal(idxObjetivo)),
             ventaActual: parseArgNumber(getVal(idxAvance)),
-            coberturaPct: parseArgNumber(getVal(idxPctAvance !== -1 ? idxPctAvance : idxAvance)),
-            montoRechazado: parseArgNumber(getVal(idxRechazo)),
+            coberturaPct: parseArgNumber(getVal(idxCobertura)),
+            montoRechazado: parseArgNumber(getVal(idxRechazoAcumul)),
             rechazoPct: pctRechazo,
             pedidosTotales: totalPedidos,
             pedidosRechazados: Math.round((pctRechazo / 100) * totalPedidos) || 0
           };
-        }).filter(v => v.nombre); // Evitar filas vacías
+        }).filter(v => v.nombre && !v.nombre.toUpperCase().includes('TOTAL GENERAL')); // Evita vacíos o fila de total
 
         setVendedoresData(parsed);
       } else {
