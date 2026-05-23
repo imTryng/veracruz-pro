@@ -122,7 +122,65 @@ const globalStyles = `
     --warn:        #d97706;
     --success:     #16a34a;
     --fuel:        #0ea5e9;
+
+    /* ── Chrome Brown (módulo comercial) ── */
+    --cb-bg:      #120c08;
+    --cb-panel:   #1e1610;
+    --cb-chrome:  #d4d4d8;
+    --cb-bronze:  #c29d6d;
+    --cb-border:  #2e2218;
+    --cb-muted:   #6b5744;
+    --cb-danger:  #c0392b;
+    --cb-ok:      #27ae60;
   }
+
+  /* Chrome Brown section */
+  .cb-section { background: var(--cb-bg); min-height: 100vh; }
+  .cb-card {
+    background: var(--cb-panel);
+    border: 1px solid var(--cb-border);
+    border-radius: 18px;
+    transition: all .25s ease;
+  }
+  .cb-card:hover {
+    border-color: var(--cb-bronze);
+    box-shadow: 0 8px 32px rgba(194,157,109,.12);
+    transform: translateY(-2px);
+  }
+  .cb-label { color: var(--cb-muted); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
+  .cb-value { color: var(--cb-chrome); font-family: 'JetBrains Mono', monospace; font-weight: 700; letter-spacing: -.02em; }
+  .cb-badge {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 800; font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+    padding: 2px 8px; border-radius: 8px;
+  }
+  .cb-progress-track {
+    background: rgba(255,255,255,.07);
+    border-radius: 99px; overflow: hidden; height: 8px;
+  }
+  .cb-progress-fill {
+    height: 100%; border-radius: 99px;
+    background: linear-gradient(90deg, #c29d6d, #e8c98a);
+    transition: width .7s cubic-bezier(.34,1.2,.64,1);
+  }
+  .cb-progress-fill.danger {
+    background: linear-gradient(90deg, #c0392b, #e74c3c);
+  }
+  .cb-progress-fill.ok {
+    background: linear-gradient(90deg, #27ae60, #2ecc71);
+  }
+  .cb-bar-col {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    flex: 1;
+  }
+  .cb-bar-inner {
+    width: 100%; border-radius: 6px 6px 0 0;
+    background: linear-gradient(180deg, #c29d6d, #8b6940);
+    transition: height .6s cubic-bezier(.34,1.2,.64,1);
+    min-height: 4px;
+  }
+  @keyframes cbFadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+  .cb-anim { animation: cbFadeUp .5s ease both; }
 
   * { font-family: 'DM Sans', sans-serif; box-sizing: border-box; }
   .font-display { font-family: 'Barlow Condensed', sans-serif; }
@@ -276,6 +334,64 @@ export default function App() {
     users:false, addUser:false, clientes:false, addCliente:false,
     editTruck:null, editExpense:null,
   });
+
+  // ─── Módulo Comercial ─────────────────────────────────────────────────────────
+  const [vendedoresData, setVendedoresData] = useState([]);
+  const [vendedoresLoading, setVendedoresLoading] = useState(false);
+
+  // ┌─────────────────────────────────────────────────────────────────────────────┐
+  // │  ARQUITECTURA GOOGLE SHEETS                                                 │
+  // │  fetchExcelData() lee un CSV publicado desde Google Sheets.                 │
+  // │  Para activar la conexión real:                                              │
+  // │    1. Abrir el Google Sheet → Archivo → Publicar en la web → CSV            │
+  // │    2. Copiar la URL generada                                                 │
+  // │    3. REEMPLAZAR la constante GOOGLE_SHEET_CSV_URL de abajo                 │
+  // └─────────────────────────────────────────────────────────────────────────────┘
+
+  // COLOCAR AQUÍ LA URL DE GOOGLE SHEETS PUBLICADA COMO CSV
+  const GOOGLE_SHEET_CSV_URL = null; // https://docs.google.com/spreadsheets/d/e/2PACX-1vRGd3hd3Ibuo__v1UTYJVCdO-gtgK0JxiFNkachDvt1a2YSMGU5z4YlGfYiANjZYS0G0TqFeFGEF5t3/pub?gid=0&single=true&output=csv
+
+  const fetchExcelData = async () => {
+    setVendedoresLoading(true);
+    try {
+      if (GOOGLE_SHEET_CSV_URL) {
+        // ── Fetch real desde Google Sheets ──────────────────────────────────────
+        const res  = await fetch(GOOGLE_SHEET_CSV_URL);
+        const text = await res.text();
+        const rows = text.trim().split('\n').slice(1); // omitir encabezado
+        const parsed = rows.map(row => {
+          const [id,nombre,zona,objetivoVolumen,ventaActual,clientesActivos,pedidosTotales,pedidosRechazados] = row.split(',');
+          return {
+            id: id?.trim(),
+            nombre: nombre?.trim(),
+            zona: zona?.trim(),
+            objetivoVolumen: Number(objetivoVolumen)||0,
+            ventaActual: Number(ventaActual)||0,
+            clientesActivos: Number(clientesActivos)||0,
+            pedidosTotales: Number(pedidosTotales)||0,
+            pedidosRechazados: Number(pedidosRechazados)||0,
+          };
+        });
+        setVendedoresData(parsed);
+      } else {
+        // ── Datos MOCK (se usan mientras no haya URL real) ──────────────────────
+        setVendedoresData([
+          { id:'1', nombre:'Marcos Díaz',     zona:'Norte',   objetivoVolumen:120000, ventaActual:98400,  clientesActivos:34, pedidosTotales:87,  pedidosRechazados:4  },
+          { id:'2', nombre:'Laura Suárez',    zona:'Centro',  objetivoVolumen:150000, ventaActual:142500, clientesActivos:52, pedidosTotales:114, pedidosRechazados:6  },
+          { id:'3', nombre:'Roberto Acuña',   zona:'Sur',     objetivoVolumen:90000,  ventaActual:54000,  clientesActivos:21, pedidosTotales:59,  pedidosRechazados:12 },
+          { id:'4', nombre:'Paola Méndez',    zona:'Oeste',   objetivoVolumen:110000, ventaActual:107800, clientesActivos:41, pedidosTotales:96,  pedidosRechazados:3  },
+          { id:'5', nombre:'Sebastián Ríos',  zona:'Este',    objetivoVolumen:130000, ventaActual:78000,  clientesActivos:29, pedidosTotales:71,  pedidosRechazados:9  },
+          { id:'6', nombre:'Camila Torres',   zona:'Centro',  objetivoVolumen:100000, ventaActual:101200, clientesActivos:38, pedidosTotales:88,  pedidosRechazados:2  },
+        ]);
+      }
+    } catch (err) {
+      console.error('fetchExcelData error:', err);
+    } finally {
+      setVendedoresLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchExcelData(); }, []);
 
   const showNotif = (msg, type='success') => { setNotif({msg,type}); setTimeout(()=>setNotif(null),4000); };
 
@@ -531,6 +647,7 @@ export default function App() {
     {id:'units',     label:'Flota'},
     {id:'history',   label:'Gastos'},
     {id:'fuel',      label:'Combustible'},
+    {id:'vendedores',label:'Avance Vendedores'},
   ];
 
   return (
@@ -633,6 +750,7 @@ export default function App() {
           {activeTab==='units'     && <FlotaPanel     stats={stats} setModals={setModals} />}
           {activeTab==='history'   && <HistoryTable   allPeriod={stats.allPeriod} trucks={trucks} truckFilter={historyTruckFilter} onTruckFilter={setHistoryTruckFilter} onBaja={handleBajaExpense} onEdit={item => setModals(m => ({...m,editExpense:item}))} fmt={fmt} onExport={handleExportExcel} />}
           {activeTab==='fuel'      && <FuelPanel priceEvolution={priceEvolution} history={history} trucks={trucks} fmt={fmt} fmtN={fmtN} />}
+          {activeTab==='vendedores'&& <AvanceVendedoresPanel vendedoresData={vendedoresData} loading={vendedoresLoading} onRefresh={fetchExcelData} fmt={fmt} />}
         </main>
 
         {/* FAB */}
@@ -1525,25 +1643,39 @@ function AltaUnidadModal({initial={}, onSubmit, onClose}) {
 // ─── EXPENSE MODAL ────────────────────────────────────────────────────────────
 
 function ExpenseModal({trucks, onSubmit, onClose}) {
-  const [tipoGasto,  setTipoGasto]  = useState('');
-  const [mantOpen,   setMantOpen]   = useState(false);
+  const [tipoGasto,  setTipoGasto]  = useState('');  // 'fijo' | 'variable'
   const [subCat,     setSubCat]     = useState('');
   const [variosDesc, setVariosDesc] = useState('');
   const [ticketFile, setTicketFile] = useState(null);
 
-  const canSubmit = tipoGasto && (tipoGasto==='combustible'||(tipoGasto==='mantenimiento'&&subCat&&(subCat!=='varios'||variosDesc)));
-
-  const OPCIONES=[
-    {value:'mecanico',label:'🔧 Mecánico'},{value:'elastiquero',label:'🔩 Elastiquero'},
-    {value:'chapista',label:'🚗 Chapista'},{value:'tapicero',label:'🪑 Tapicero'},
-    {value:'gomeria',label:'🔄 Gomería'},{value:'electricista',label:'⚡ Electricista'},
-    {value:'neumaticos',label:'🛞 Neumáticos'},{value:'taller',label:'🏭 Taller'},
-    {value:'varios',label:'📦 Varios'},
+  // Gasto Fijo: sólo Combustible
+  // Gasto Variable: Mecánico, Gomería, Repuestos, Servicios
+  const VARS = [
+    {value:'mecanico',  label:'🔧 Mecánico'},
+    {value:'gomeria',   label:'🔄 Gomería'},
+    {value:'repuestos', label:'🛠 Repuestos'},
+    {value:'servicios', label:'📋 Servicios'},
   ];
+
+  const canSubmit =
+    (tipoGasto==='fijo') ||
+    (tipoGasto==='variable' && subCat && (subCat!=='varios' || variosDesc));
+
+  // El category que se envía al handler
+  const resolveCategory = () => {
+    if (tipoGasto==='fijo') return 'combustible';
+    if (subCat==='varios')  return 'varios';
+    return subCat;
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSubmit(e,{category:tipoGasto==='combustible'?'combustible':subCat,variosDesc:subCat==='varios'?variosDesc:'',fotoTicket:ticketFile});
+    const cat = resolveCategory();
+    onSubmit(e, {
+      category: cat,
+      variosDesc: cat==='varios' ? variosDesc : '',
+      fotoTicket: ticketFile,
+    });
   };
 
   return (
@@ -1558,52 +1690,45 @@ function ExpenseModal({trucks, onSubmit, onClose}) {
             {trucks.map((t) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
           </select>
 
+          {/* ── Tipo principal ── */}
           <div className="space-y-2">
             <p className="text-[8px] font-bold uppercase tracking-wider" style={{color:'var(--oxford)'}}>Tipo de Gasto</p>
             <div className="grid grid-cols-2 gap-3">
-              <button type="button" onClick={() => {setTipoGasto('combustible');setSubCat('');setMantOpen(false);}}
-                className="p-4 rounded-xl font-bold text-sm uppercase border-2 transition-all"
-                style={tipoGasto==='combustible'?{background:'#0ea5e9',color:'white',borderColor:'#0ea5e9',boxShadow:'0 6px 20px rgba(14,165,233,.35)'}:{background:'var(--ice)',color:'var(--oxford)',borderColor:'var(--mist)'}}>
-                ⛽ Combustible
+
+              {/* GASTO FIJO → Combustible */}
+              <button type="button"
+                onClick={() => { setTipoGasto('fijo'); setSubCat(''); }}
+                className="p-4 rounded-xl font-bold text-sm uppercase border-2 transition-all flex flex-col items-center gap-1"
+                style={tipoGasto==='fijo'
+                  ? {background:'#0ea5e9',color:'white',borderColor:'#0ea5e9',boxShadow:'0 6px 20px rgba(14,165,233,.35)'}
+                  : {background:'var(--ice)',color:'var(--oxford)',borderColor:'var(--mist)'}}>
+                <span className="text-xl">⛽</span>
+                <span>Combustible</span>
+                <span className="text-[7px] font-semibold normal-case"
+                  style={{color: tipoGasto==='fijo'?'rgba(255,255,255,.7)':'var(--mist)'}}>Gasto Fijo</span>
               </button>
-              <button type="button" onClick={() => {setTipoGasto('mantenimiento');setMantOpen(o=>!o);}}
-                className="p-4 rounded-xl font-bold text-sm uppercase border-2 transition-all flex items-center justify-center gap-2"
-                style={tipoGasto==='mantenimiento'?{background:'var(--navy)',color:'white',borderColor:'var(--navy)',boxShadow:'0 6px 20px rgba(11,17,32,.3)'}:{background:'var(--ice)',color:'var(--oxford)',borderColor:'var(--mist)'}}>
-                🔧 Mantenimiento <span className={`text-xs inline-block transition-transform ${mantOpen?'rotate-180':''}`}>▼</span>
+
+              {/* GASTO VARIABLE → Mantenimiento */}
+              <button type="button"
+                onClick={() => { setTipoGasto('variable'); setSubCat(''); }}
+                className="p-4 rounded-xl font-bold text-sm uppercase border-2 transition-all flex flex-col items-center gap-1"
+                style={tipoGasto==='variable'
+                  ? {background:'var(--navy)',color:'white',borderColor:'var(--navy)',boxShadow:'0 6px 20px rgba(11,17,32,.3)'}
+                  : {background:'var(--ice)',color:'var(--oxford)',borderColor:'var(--mist)'}}>
+                <span className="text-xl">🔧</span>
+                <span>Mantenimiento</span>
+                <span className="text-[7px] font-semibold normal-case"
+                  style={{color: tipoGasto==='variable'?'rgba(255,255,255,.7)':'var(--mist)'}}>Gasto Variable</span>
               </button>
             </div>
           </div>
 
-          {tipoGasto==='mantenimiento'&&mantOpen && (
-            <div className="grid grid-cols-3 gap-2 p-4 rounded-xl border" style={{background:'#f8faff',borderColor:'var(--mist)'}}>
-              {OPCIONES.map(op => (
-                <button key={op.value} type="button" onClick={() => {setSubCat(op.value);setMantOpen(false);}}
-                  className="p-2.5 rounded-xl font-bold text-[9px] uppercase text-left border transition-all"
-                  style={subCat===op.value?{background:'var(--navy)',color:'white',borderColor:'var(--navy)'}:{background:'white',color:'var(--steel)',borderColor:'var(--mist)'}}>
-                  {op.label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {tipoGasto==='mantenimiento'&&subCat && (
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl border" style={{background:'#f0f9ff',borderColor:'#bae6fd'}}>
-              <span className="text-[8px] font-bold uppercase" style={{color:'var(--fuel)'}}>Subcategoría:</span>
-              <span className="text-xs font-bold uppercase" style={{color:'var(--navy)'}}>{subCat}</span>
-              <button type="button" onClick={() => setSubCat('')} className="ml-auto text-xs" style={{color:'var(--oxford)'}}>✕</button>
-            </div>
-          )}
-
-          {subCat==='varios' && (
-            <div>
-              <label className="text-[8px] font-bold uppercase tracking-wider mb-1 block" style={{color:'var(--oxford)'}}>Descripción (obligatorio)</label>
-              <input value={variosDesc} onChange={e => setVariosDesc(e.target.value)} required placeholder="Describí el gasto..." className="inp w-full p-3.5" />
-            </div>
-          )}
-
-          {tipoGasto==='combustible' && (
+          {/* ── Combustible: datos de carga ── */}
+          {tipoGasto==='fijo' && (
             <div className="rounded-xl p-4 space-y-3 border" style={{background:'#f0f9ff',borderColor:'#bae6fd'}}>
-              <p className="text-[8px] font-bold uppercase tracking-wider" style={{color:'var(--fuel)'}}>⛽ Datos de Carga</p>
+              <p className="text-[8px] font-bold uppercase tracking-wider flex items-center gap-1.5" style={{color:'var(--fuel)'}}>
+                <Fuel size={12}/> Datos de Carga — Gasto Fijo
+              </p>
               <div>
                 <label className="text-[7px] font-bold uppercase tracking-wider mb-1 block" style={{color:'var(--oxford)'}}>Litros Cargados *</label>
                 <input name="litros" type="number" step="0.01" required placeholder="0.00" className="inp w-full p-2.5 text-sm" />
@@ -1628,6 +1753,33 @@ function ExpenseModal({trucks, onSubmit, onClose}) {
             </div>
           )}
 
+          {/* ── Variable: subcategorías ── */}
+          {tipoGasto==='variable' && (
+            <div className="rounded-xl p-4 border space-y-3" style={{background:'#f8faff',borderColor:'var(--mist)'}}>
+              <p className="text-[8px] font-bold uppercase tracking-wider" style={{color:'var(--oxford)'}}>Categoría del gasto</p>
+              <div className="grid grid-cols-2 gap-2">
+                {VARS.map(op => (
+                  <button key={op.value} type="button"
+                    onClick={() => setSubCat(op.value)}
+                    className="p-3 rounded-xl font-bold text-xs uppercase border-2 text-left transition-all"
+                    style={subCat===op.value
+                      ? {background:'var(--navy)',color:'white',borderColor:'var(--navy)'}
+                      : {background:'white',color:'var(--steel)',borderColor:'var(--mist)'}}>
+                    {op.label}
+                  </button>
+                ))}
+              </div>
+              {subCat && (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl" style={{background:'#eff6ff',border:'1px solid #bfdbfe'}}>
+                  <span className="text-[8px] font-bold uppercase" style={{color:'var(--accent)'}}>Seleccionado:</span>
+                  <span className="text-xs font-bold uppercase" style={{color:'var(--navy)'}}>{subCat}</span>
+                  <button type="button" onClick={()=>setSubCat('')} className="ml-auto" style={{color:'var(--oxford)'}}>✕</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Monto ── */}
           <div className="relative">
             <span className="absolute left-5 top-1/2 -translate-y-1/2 text-2xl font-black" style={{color:'var(--oxford)'}}>$</span>
             <input name="amount" type="number" step="0.01" required placeholder="0.00"
@@ -1928,6 +2080,290 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}) {
           </form>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── AVANCE VENDEDORES PANEL ──────────────────────────────────────────────────
+
+function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
+
+  // KPIs globales
+  const totalVenta     = vendedoresData.reduce((a,v) => a + v.ventaActual, 0);
+  const totalObjetivo  = vendedoresData.reduce((a,v) => a + v.objetivoVolumen, 0);
+  const totalClientes  = vendedoresData.reduce((a,v) => a + v.clientesActivos, 0);
+  const totalPedidos   = vendedoresData.reduce((a,v) => a + v.pedidosTotales, 0);
+  const totalRechazos  = vendedoresData.reduce((a,v) => a + v.pedidosRechazados, 0);
+  const pctGlobalVenta = totalObjetivo > 0 ? (totalVenta / totalObjetivo) * 100 : 0;
+  const pctRechazoGlobal = totalPedidos > 0 ? (totalRechazos / totalPedidos) * 100 : 0;
+
+  // Para el gráfico de barras comparativo
+  const maxVenta = Math.max(...vendedoresData.map(v => v.ventaActual), 1);
+
+  if (loading) return (
+    <div className="cb-section flex items-center justify-center" style={{minHeight:'60vh'}}>
+      <div className="flex flex-col items-center gap-4">
+        <Loader2 size={36} className="animate-spin" style={{color:'var(--cb-bronze)'}} />
+        <p className="cb-label">Cargando datos comerciales...</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="cb-section p-4 md:p-6 space-y-6 cb-anim" style={{borderRadius:0}}>
+
+      {/* ── Cabecera ── */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="cb-label mb-1">Módulo Comercial</p>
+          <h2 className="font-display font-black text-3xl uppercase tracking-tight" style={{color:'var(--cb-chrome)'}}>
+            Avance <span style={{color:'var(--cb-bronze)'}}>Vendedores</span>
+          </h2>
+          <p className="cb-label mt-1">{vendedoresData.length} vendedores activos · Datos en tiempo real</p>
+        </div>
+        <button onClick={onRefresh}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs uppercase transition-all"
+          style={{background:'var(--cb-panel)',border:'1px solid var(--cb-border)',color:'var(--cb-bronze)'}}>
+          <RotateCcw size={13}/> Actualizar
+        </button>
+      </div>
+
+      {/* ── KPIs globales ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { label:'Venta Total Flota', value:fmt(totalVenta),  sub:`${pctGlobalVenta.toFixed(1)}% del objetivo`, icon:DollarSign, accent:'var(--cb-bronze)' },
+          { label:'Clientes Activos',  value:totalClientes,    sub:'total de la red', icon:Users,   accent:'#7dd3fc' },
+          { label:'Pedidos Período',   value:totalPedidos,     sub:`${totalRechazos} rechazados`, icon:RotateCcw, accent:'#86efac' },
+          { label:'Rechazo Global',    value:`${pctRechazoGlobal.toFixed(1)}%`, sub:'pedidos rechazados / total',
+            icon: pctRechazoGlobal>10 ? AlertTriangle : ShieldCheck,
+            accent: pctRechazoGlobal>10 ? 'var(--cb-danger)' : 'var(--cb-ok)' },
+        ].map(kpi => (
+          <div key={kpi.label} className="cb-card p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="p-2 rounded-xl" style={{background:'rgba(255,255,255,.05)'}}>
+                <kpi.icon size={14} style={{color:kpi.accent}} />
+              </div>
+            </div>
+            <p className="cb-label mb-1">{kpi.label}</p>
+            <p className="cb-value text-2xl leading-none">{kpi.value}</p>
+            <p className="cb-label mt-1" style={{color:'rgba(212,212,216,.4)'}}>{kpi.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Tarjetas por vendedor ── */}
+      <div>
+        <p className="cb-label mb-3">Rendimiento Individual</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {vendedoresData.map((v, idx) => {
+            const pctVol    = v.objetivoVolumen > 0 ? Math.min((v.ventaActual / v.objetivoVolumen) * 100, 100) : 0;
+            const pctRechazo= v.pedidosTotales  > 0 ? (v.pedidosRechazados / v.pedidosTotales) * 100 : 0;
+            const superaObj  = v.ventaActual >= v.objetivoVolumen;
+            const alertaRech = pctRechazo > 10;
+            const delay      = idx * 60;
+
+            return (
+              <div key={v.id} className="cb-card p-5 space-y-4"
+                style={{animationDelay:`${delay}ms`,
+                  borderColor: superaObj ? 'var(--cb-bronze)' : 'var(--cb-border)',
+                  boxShadow: superaObj ? '0 0 0 1px rgba(194,157,109,.3), 0 8px 32px rgba(194,157,109,.08)' : 'none'}}>
+
+                {/* Encabezado vendedor */}
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center font-display font-black text-sm shrink-0"
+                      style={{background:'rgba(194,157,109,.15)', color:'var(--cb-bronze)', border:'1px solid rgba(194,157,109,.25)'}}>
+                      {v.nombre.split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-display font-black text-base uppercase leading-tight" style={{color:'var(--cb-chrome)'}}>{v.nombre}</p>
+                      <p className="cb-label" style={{color:'var(--cb-bronze)'}}>{v.zona}</p>
+                    </div>
+                  </div>
+                  {superaObj
+                    ? <span className="cb-badge" style={{background:'rgba(39,174,96,.2)',color:'#2ecc71',border:'1px solid rgba(39,174,96,.3)'}}>✓ OBJ</span>
+                    : <span className="cb-badge" style={{background:'rgba(194,157,109,.15)',color:'var(--cb-bronze)',border:'1px solid rgba(194,157,109,.25)'}}>EN CURSO</span>
+                  }
+                </div>
+
+                {/* KPI: Objetivo de Volumen con barra */}
+                <div>
+                  <div className="flex justify-between items-end mb-1.5">
+                    <p className="cb-label">Objetivo de Volumen</p>
+                    <p className="cb-value text-xs">{pctVol.toFixed(1)}%</p>
+                  </div>
+                  <div className="cb-progress-track">
+                    <div className={`cb-progress-fill ${superaObj?'ok':pctVol<50?'danger':''}`}
+                      style={{width:`${pctVol}%`}} />
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span className="cb-label" style={{color:'rgba(212,212,216,.4)'}}>{fmt(v.ventaActual)}</span>
+                    <span className="cb-label" style={{color:'rgba(212,212,216,.4)'}}>/ {fmt(v.objetivoVolumen)}</span>
+                  </div>
+                </div>
+
+                {/* KPIs menores en grid */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-xl p-2.5 text-center" style={{background:'rgba(255,255,255,.04)',border:'1px solid var(--cb-border)'}}>
+                    <p className="cb-value text-lg leading-none">{v.clientesActivos}</p>
+                    <p className="cb-label mt-1">Clientes</p>
+                  </div>
+                  <div className="rounded-xl p-2.5 text-center" style={{background:'rgba(255,255,255,.04)',border:'1px solid var(--cb-border)'}}>
+                    <p className="cb-value text-lg leading-none">{v.pedidosTotales}</p>
+                    <p className="cb-label mt-1">Pedidos</p>
+                  </div>
+                  <div className="rounded-xl p-2.5 text-center"
+                    style={{background: alertaRech?'rgba(192,57,43,.15)':'rgba(39,174,96,.08)',
+                      border:`1px solid ${alertaRech?'rgba(192,57,43,.35)':'rgba(39,174,96,.2)'}`}}>
+                    <p className="cb-value text-lg leading-none"
+                      style={{color: alertaRech?'#e74c3c':'#2ecc71'}}>{pctRechazo.toFixed(1)}%</p>
+                    <p className="cb-label mt-1" style={{color: alertaRech?'rgba(231,76,60,.7)':'rgba(46,204,113,.7)'}}>Rechazo</p>
+                  </div>
+                </div>
+
+                {/* Barra de rechazo */}
+                <div>
+                  <p className="cb-label mb-1.5">Rechazo Acumulado ({v.pedidosRechazados}/{v.pedidosTotales} pedidos)</p>
+                  <div className="cb-progress-track">
+                    <div className={`cb-progress-fill ${alertaRech?'danger':'ok'}`}
+                      style={{width:`${Math.min(pctRechazo*3,100)}%`}} />
+                  </div>
+                  <div className="flex items-center gap-1 mt-1">
+                    {alertaRech
+                      ? <><AlertTriangle size={9} style={{color:'#e74c3c'}}/><span className="cb-label" style={{color:'#e74c3c'}}>Nivel de alerta — revisar</span></>
+                      : <><ShieldCheck size={9} style={{color:'#2ecc71'}}/><span className="cb-label" style={{color:'rgba(46,204,113,.7)'}}>Dentro del rango aceptable</span></>
+                    }
+                  </div>
+                </div>
+
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Gráfico comparativo CSS ── */}
+      {vendedoresData.length > 0 && (
+        <div className="cb-card p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <p className="cb-label mb-0.5">Comparativa de Desempeño</p>
+              <h3 className="font-display font-black text-xl uppercase" style={{color:'var(--cb-chrome)'}}>
+                Venta Actual vs Objetivo
+              </h3>
+            </div>
+            <div className="flex gap-4">
+              {[{color:'var(--cb-bronze)',label:'Venta Actual'},{color:'rgba(212,212,216,.2)',label:'Objetivo'}].map(({color,label}) => (
+                <div key={label} className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-sm" style={{background:color}}/>
+                  <span className="cb-label">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Barras CSS nativas */}
+          <div className="flex items-end gap-3" style={{height:180}}>
+            {vendedoresData.map(v => {
+              const hVenta = Math.round((v.ventaActual / maxVenta) * 160);
+              const hObj   = Math.round((v.objetivoVolumen / maxVenta) * 160);
+              return (
+                <div key={v.id} className="cb-bar-col">
+                  <div className="flex items-end gap-1 w-full justify-center" style={{height:160}}>
+                    {/* Objetivo (fondo) */}
+                    <div style={{
+                      width:'36%', height:`${hObj}px`,
+                      background:'rgba(212,212,216,.12)',
+                      borderRadius:'6px 6px 0 0',
+                      border:'1px solid rgba(212,212,216,.08)',
+                    }}/>
+                    {/* Venta actual */}
+                    <div style={{
+                      width:'36%', height:`${hVenta}px`,
+                      background: v.ventaActual>=v.objetivoVolumen
+                        ? 'linear-gradient(180deg,#2ecc71,#27ae60)'
+                        : 'linear-gradient(180deg,#c29d6d,#8b6940)',
+                      borderRadius:'6px 6px 0 0',
+                      boxShadow: v.ventaActual>=v.objetivoVolumen
+                        ? '0 -4px 12px rgba(39,174,96,.3)'
+                        : '0 -4px 12px rgba(194,157,109,.25)',
+                    }}/>
+                  </div>
+                  <p className="cb-label text-center" style={{fontSize:8,color:'rgba(212,212,216,.5)'}}>
+                    {v.nombre.split(' ')[0]}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Escala */}
+          <div className="flex justify-between mt-3 pt-3" style={{borderTop:'1px solid var(--cb-border)'}}>
+            {vendedoresData.map(v => (
+              <div key={v.id} className="flex-1 text-center">
+                <p className="cb-value" style={{fontSize:9}}>{fmt(v.ventaActual)}</p>
+                <p className="cb-label" style={{fontSize:7,color:'rgba(194,157,109,.5)'}}>{v.zona}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Tabla resumen ── */}
+      <div className="cb-card overflow-hidden">
+        <div className="p-4" style={{borderBottom:'1px solid var(--cb-border)'}}>
+          <p className="font-display font-black text-base uppercase" style={{color:'var(--cb-chrome)'}}>Resumen de la Red</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px]">
+            <thead style={{background:'rgba(255,255,255,.03)'}}>
+              <tr style={{borderBottom:'1px solid var(--cb-border)'}}>
+                {['Vendedor','Zona','Cumplimiento','Clientes','Pedidos','Rechazos','Estado'].map(h => (
+                  <th key={h} className="px-4 py-3 text-left" style={{color:'var(--cb-muted)',fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em'}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[...vendedoresData].sort((a,b) => (b.ventaActual/b.objetivoVolumen)-(a.ventaActual/a.objetivoVolumen)).map(v => {
+                const pct   = v.objetivoVolumen>0?((v.ventaActual/v.objetivoVolumen)*100):0;
+                const rech  = v.pedidosTotales>0?((v.pedidosRechazados/v.pedidosTotales)*100):0;
+                const ok    = v.ventaActual>=v.objetivoVolumen;
+                const alert = rech>10;
+                return (
+                  <tr key={v.id} style={{borderBottom:'1px solid var(--cb-border)'}}>
+                    <td className="px-4 py-3">
+                      <p className="font-display font-bold text-xs uppercase" style={{color:'var(--cb-chrome)'}}>{v.nombre}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="cb-label px-2 py-1 rounded-lg" style={{background:'rgba(194,157,109,.1)',color:'var(--cb-bronze)'}}>{v.zona}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div style={{width:60,height:6,background:'rgba(255,255,255,.07)',borderRadius:99,overflow:'hidden'}}>
+                          <div style={{width:`${Math.min(pct,100)}%`,height:'100%',background:ok?'#2ecc71':'#c29d6d',borderRadius:99}}/>
+                        </div>
+                        <span className="cb-value" style={{fontSize:10,color:ok?'#2ecc71':'var(--cb-chrome)'}}>{pct.toFixed(0)}%</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 cb-value" style={{fontSize:11,color:'var(--cb-chrome)'}}>{v.clientesActivos}</td>
+                    <td className="px-4 py-3 cb-value" style={{fontSize:11,color:'var(--cb-chrome)'}}>{v.pedidosTotales}</td>
+                    <td className="px-4 py-3">
+                      <span className="cb-value" style={{fontSize:11,color:alert?'#e74c3c':'#2ecc71'}}>{rech.toFixed(1)}%</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {ok
+                        ? <span className="cb-badge" style={{background:'rgba(39,174,96,.15)',color:'#2ecc71',border:'1px solid rgba(39,174,96,.3)'}}>Objetivo alcanzado</span>
+                        : <span className="cb-badge" style={{background:'rgba(194,157,109,.12)',color:'var(--cb-bronze)',border:'1px solid rgba(194,157,109,.25)'}}>En progreso</span>
+                      }
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
   );
 }
