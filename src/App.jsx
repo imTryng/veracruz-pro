@@ -676,7 +676,7 @@ export default function App() {
   return (
     <>
       <style>{globalStyles}</style>
-      <div className="min-h-screen" style={{background:'var(--ice)'}}>
+      <div className="min-h-screen bg-[#0b0f19]">
         <Notification banner={notif} />
         {dbError && <div className="max-w-7xl mx-auto px-4 mt-3"><div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-700 text-sm font-semibold">{dbError}</div></div>}
 
@@ -744,23 +744,23 @@ export default function App() {
           )}
 
           {/* Filtros */}
-          <div className="card p-4">
+          <div className="bg-[#131c2e] border border-slate-800 rounded-2xl p-4">
             <div className="flex flex-wrap gap-3">
               <div className="flex-1 min-w-[160px]">
-                <label className="text-[8px] font-bold uppercase tracking-wider mb-1 block" style={{color:'var(--oxford)'}}>Buscar unidad</label>
+                <label className="text-[8px] font-bold uppercase tracking-wider mb-1 block text-slate-400">Buscar unidad</label>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={13} style={{color:'var(--mist)'}} />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={13} />
                   <input type="text" placeholder="Patente o chofer..."
-                    className="inp pl-8 pr-3 py-2.5 text-xs w-full"
+                    className="w-full pl-8 pr-3 py-2.5 text-xs bg-[#0b0f19] border border-slate-800 rounded-xl text-white focus:border-blue-500 focus:outline-none transition-colors placeholder-slate-600"
                     value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 </div>
               </div>
               <div>
-                <label className="text-[8px] font-bold uppercase tracking-wider mb-1 block" style={{color:'var(--oxford)'}}>Período</label>
-                <div className="inp flex items-center gap-2 px-3 py-2">
-                  <input type="date" value={dateRange.start} onChange={e => setDateRange(p => ({...p,start:e.target.value}))} className="bg-transparent text-[10px] outline-none" style={{color:'var(--navy)'}} />
-                  <span style={{color:'var(--mist)'}}>—</span>
-                  <input type="date" value={dateRange.end}   onChange={e => setDateRange(p => ({...p,end:e.target.value}))}   className="bg-transparent text-[10px] outline-none" style={{color:'var(--navy)'}} />
+                <label className="text-[8px] font-bold uppercase tracking-wider mb-1 block text-slate-400">Período</label>
+                <div className="flex items-center gap-2 px-3 py-2 bg-[#0b0f19] border border-slate-800 rounded-xl">
+                  <input type="date" value={dateRange.start} onChange={e => setDateRange(p => ({...p,start:e.target.value}))} className="bg-transparent text-[10px] outline-none text-white [color-scheme:dark]" />
+                  <span className="text-slate-600">—</span>
+                  <input type="date" value={dateRange.end}   onChange={e => setDateRange(p => ({...p,end:e.target.value}))}   className="bg-transparent text-[10px] outline-none text-white [color-scheme:dark]" />
                 </div>
               </div>
             </div>
@@ -778,7 +778,7 @@ export default function App() {
 
         {/* FAB */}
         <button onClick={() => setModals(m => ({...m,expense:true}))}
-          className="fab fixed bottom-6 right-6 z-40 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center transition-colors">
+          className="fab fixed bottom-6 right-6 z-40 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center transition-colors shadow-[0_8px_28px_rgba(37,99,235,0.48)]">
           <Plus size={22} />
         </button>
 
@@ -975,36 +975,36 @@ function DashboardPanel({stats,trucks,fmt}) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="col-span-2 lg:col-span-1 kpi-hero p-6 flex flex-col justify-between" style={{minHeight:148}}>
+        <div className="col-span-2 lg:col-span-1 bg-[#131c2e] border border-slate-800 rounded-2xl p-6 flex flex-col justify-between transition-all hover:border-slate-700" style={{minHeight:148}}>
           <div className="relative flex items-center justify-between mb-4">
-            <div className="p-2 rounded-xl" style={{background:'rgba(37,99,235,.25)'}}><DollarSign size={14} style={{color:'#93c5fd'}} /></div>
-            <span className="text-[7px] font-bold uppercase tracking-widest px-2 py-1 rounded-full" style={{color:'#93c5fd',background:'rgba(37,99,235,.2)'}}>Período</span>
+            <div className="p-2 rounded-xl bg-blue-500/10"><DollarSign size={14} className="text-blue-400" /></div>
+            <span className="text-[7px] font-bold uppercase tracking-widest px-2 py-1 rounded-full text-blue-400 bg-blue-500/10">Período</span>
           </div>
           <div className="relative">
-            <p className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{color:'rgba(255,255,255,.4)'}}>Total Egresos</p>
-            <p className="font-data text-3xl text-white leading-none">{fmt(stats.grandTotal)}</p>
+            <p className="text-[8px] font-bold uppercase tracking-widest mb-1 text-slate-400">Total Egresos</p>
+            <p className="font-data text-3xl font-bold tracking-tight text-white leading-none truncate">{fmt(stats.grandTotal)}</p>
           </div>
         </div>
-        <SubKpi label="Unidades Activas"     value={trucks.length}  Icon={Truck}      accent="#2563eb" bg="#eff6ff" border="#bfdbfe" suffix="activas" />
-        <SubKpi label="Operaciones"          value={stats.totalExpenses} Icon={RotateCcw} accent="#d97706" bg="#fffbeb" border="#fde68a" suffix="registros" />
-        <SubKpi label="Promedio por Unidad" value={fmt(stats.grandTotal/(trucks.length||1))} Icon={TrendingUp} accent="#7c3aed" bg="#f5f3ff" border="#ddd6fe" mono />
+        <SubKpi label="Unidades Activas"     value={trucks.length}  Icon={Truck}      accent="text-blue-400" bg="bg-blue-500/10" border="border-transparent" suffix="activas" />
+        <SubKpi label="Operaciones"          value={stats.totalExpenses} Icon={RotateCcw} accent="text-amber-400" bg="bg-amber-500/10" border="border-transparent" suffix="registros" />
+        <SubKpi label="Promedio por Unidad" value={fmt(stats.grandTotal/(trucks.length||1))} Icon={TrendingUp} accent="text-purple-400" bg="bg-purple-500/10" border="border-transparent" mono />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {[
-          {label:'Combustible',   emoji:'⛽', pct:combustiblePct,   val:stats.pieData.find((d)=>d.name==='Combustible')?.value||0,   color:'#0ea5e9', bg:'#f0f9ff', border:'#bae6fd', barColor:'linear-gradient(90deg,#38bdf8,#0ea5e9)'},
-          {label:'Mantenimiento', emoji:'🔧', pct:mantenimientoPct, val:stats.pieData.find((d)=>d.name==='Mantenimiento')?.value||0, color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe', barColor:'linear-gradient(90deg,#60a5fa,#2563eb)'},
+          {label:'Combustible',   emoji:'⛽', pct:combustiblePct,   val:stats.pieData.find((d)=>d.name==='Combustible')?.value||0,   color:'text-sky-400', bg:'bg-sky-500/10', border:'bg-slate-800', barColor:'linear-gradient(90deg,#38bdf8,#0ea5e9)', textC: 'text-sky-400'},
+          {label:'Mantenimiento', emoji:'🔧', pct:mantenimientoPct, val:stats.pieData.find((d)=>d.name==='Mantenimiento')?.value||0, color:'text-blue-500', bg:'bg-blue-500/10', border:'bg-slate-800', barColor:'linear-gradient(90deg,#60a5fa,#2563eb)', textC: 'text-blue-500'},
         ].map(item => (
-          <div key={item.label} className="rounded-2xl p-5 border" style={{background:item.bg,borderColor:item.border}}>
+          <div key={item.label} className="bg-[#131c2e] border border-slate-800 rounded-2xl p-5">
             <div className="flex items-center gap-2 mb-3">
-              <div className="w-8 h-8 rounded-xl flex items-center justify-center text-sm" style={{background:item.color}}>{item.emoji}</div>
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm ${item.bg}`}>{item.emoji}</div>
               <div>
-                <p className="text-[8px] font-bold uppercase tracking-wider" style={{color:item.color}}>{item.label}</p>
-                <p className="text-[10px] font-bold" style={{color:item.color}}>{item.pct}% del total</p>
+                <p className={`text-[8px] font-bold uppercase tracking-wider ${item.textC}`}>{item.label}</p>
+                <p className={`text-[10px] font-bold ${item.textC}`}>{item.pct}% del total</p>
               </div>
             </div>
-            <p className="font-data text-xl" style={{color:item.color}}>{fmt(item.val)}</p>
-            <div className="mt-3 h-1.5 rounded-full" style={{background:item.border}}>
+            <p className={`font-data text-2xl font-bold tracking-tight text-white truncate`}>{fmt(item.val)}</p>
+            <div className={`mt-3 h-1.5 rounded-full ${item.border}`}>
               <div className="h-full rounded-full transition-all duration-700" style={{width:`${item.pct}%`,background:item.barColor}} />
             </div>
           </div>
@@ -1012,35 +1012,35 @@ function DashboardPanel({stats,trucks,fmt}) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-        <div className="lg:col-span-3 card p-6">
+        <div className="lg:col-span-3 bg-[#131c2e] border border-slate-800 rounded-2xl p-6">
           <div className="flex items-start justify-between mb-5">
             <div>
-              <h3 className="font-display font-black text-base uppercase tracking-tight" style={{color:'var(--navy)'}}>Costos por Unidad</h3>
-              <p className="text-[10px] mt-0.5" style={{color:'var(--oxford)'}}>Fijos + Variables del período</p>
+              <h3 className="font-display font-black text-base uppercase tracking-tight text-white">Costos por Unidad</h3>
+              <p className="text-[10px] mt-0.5 text-slate-400">Fijos + Variables del período</p>
             </div>
             <div className="flex gap-3">
               {[['#0ea5e9','Combustible'],['#f97316','Mantenimiento']].map(([c,l]) => (
-                <div key={l} className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm" style={{background:c}}/><span className="text-[9px] font-bold uppercase" style={{color:'var(--oxford)'}}>{l}</span></div>
+                <div key={l} className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm" style={{background:c}}/><span className="text-[9px] font-bold uppercase text-slate-400">{l}</span></div>
               ))}
             </div>
           </div>
           <div className="h-[240px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stats.truckStats} barSize={32}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
                 <XAxis dataKey="patente" axisLine={false} tickLine={false} tick={{fontSize:10,fontWeight:'700',fill:'#64748b',fontFamily:'Barlow Condensed'}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
-                <Tooltip content={<BarTooltip fmt={fmt}/>} />
+                <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#64748b'}} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
+                <Tooltip content={<BarTooltip fmt={fmt}/>} cursor={{fill: '#1e293b'}} />
                 <Bar dataKey="fuelTotal"  stackId="a" fill="#0ea5e9" name="Combustible" />
                 <Bar dataKey="maintTotal" stackId="a" fill="#f97316" radius={[5,5,0,0]} name="Mantenimiento" />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="lg:col-span-2 card p-6 flex flex-col">
+        <div className="lg:col-span-2 bg-[#131c2e] border border-slate-800 rounded-2xl p-6 flex flex-col">
           <div className="mb-4">
-            <h3 className="font-display font-black text-base uppercase tracking-tight" style={{color:'var(--navy)'}}>Distribución</h3>
-            <p className="text-[10px] mt-0.5" style={{color:'var(--oxford)'}}>Combustible vs Mantenimiento</p>
+            <h3 className="font-display font-black text-base uppercase tracking-tight text-white">Distribución</h3>
+            <p className="text-[10px] mt-0.5 text-slate-400">Combustible vs Mantenimiento</p>
           </div>
           <div className="flex-1 flex items-center justify-center">
             <div className="h-[160px] w-full">
@@ -1049,16 +1049,16 @@ function DashboardPanel({stats,trucks,fmt}) {
                   <Pie data={stats.pieData} innerRadius={50} outerRadius={68} paddingAngle={4} dataKey="value" strokeWidth={0}>
                     <Cell fill="#0ea5e9"/><Cell fill="#f97316"/>
                   </Pie>
-                  <Tooltip formatter={(v) => fmt(v)} />
+                  <Tooltip formatter={(v) => fmt(v)} contentStyle={{background:'#0f172a',border:'1px solid #1e293b',borderRadius:'8px',color:'#fff'}} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
           </div>
           <div className="space-y-2">
-            {[{label:'Combustible',val:stats.pieData.find((d)=>d.name==='Combustible')?.value||0,color:'#0ea5e9',bg:'#f0f9ff'},{label:'Mantenimiento',val:stats.pieData.find((d)=>d.name==='Mantenimiento')?.value||0,color:'#f97316',bg:'#fff7ed'}].map(item => (
-              <div key={item.label} className="flex items-center justify-between rounded-xl px-3 py-2" style={{background:item.bg}}>
+            {[{label:'Combustible',val:stats.pieData.find((d)=>d.name==='Combustible')?.value||0,color:'#0ea5e9',bg:'bg-sky-500/10'},{label:'Mantenimiento',val:stats.pieData.find((d)=>d.name==='Mantenimiento')?.value||0,color:'#f97316',bg:'bg-orange-500/10'}].map(item => (
+              <div key={item.label} className={`flex items-center justify-between rounded-xl px-3 py-2 ${item.bg}`}>
                 <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{background:item.color}}/><span className="text-[9px] font-bold uppercase" style={{color:item.color}}>{item.label}</span></div>
-                <span className="font-mono text-[10px] font-bold" style={{color:'var(--navy)'}}>{fmt(item.val)}</span>
+                <span className="font-mono text-[10px] font-bold text-white">{fmt(item.val)}</span>
               </div>
             ))}
           </div>
@@ -1066,22 +1066,22 @@ function DashboardPanel({stats,trucks,fmt}) {
       </div>
 
       {stats.trendData.length>1 && (
-        <div className="card p-6">
+        <div className="bg-[#131c2e] border border-slate-800 rounded-2xl p-6">
           <div className="flex items-start justify-between mb-5">
             <div>
-              <h3 className="font-display font-black text-base uppercase tracking-tight" style={{color:'var(--navy)'}}>Tendencia Mensual</h3>
-              <p className="text-[10px] mt-0.5" style={{color:'var(--oxford)'}}>Evolución de costos — últimos 6 meses</p>
+              <h3 className="font-display font-black text-base uppercase tracking-tight text-white">Tendencia Mensual</h3>
+              <p className="text-[10px] mt-0.5 text-slate-400">Evolución de costos — últimos 6 meses</p>
             </div>
           </div>
           <div className="h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={stats.trendData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
                 <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{fontSize:10,fontWeight:'600',fill:'#94a3b8'}} />
                 <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{background:'var(--navy)',border:'none',borderRadius:10,color:'white',fontSize:11}} formatter={(v) => [fmt(v)]} />
-                <Line type="monotone" dataKey="combustible"   stroke="#f97316" strokeWidth={2.5} dot={{fill:'#f97316',r:4,strokeWidth:2,stroke:'white'}} name="Combustible" />
-                <Line type="monotone" dataKey="mantenimiento" stroke="#2563eb" strokeWidth={2.5} dot={{fill:'#2563eb',r:4,strokeWidth:2,stroke:'white'}} name="Mantenimiento" />
+                <Tooltip contentStyle={{background:'#0f172a',border:'1px solid #1e293b',borderRadius:10,color:'white',fontSize:11}} formatter={(v) => [fmt(v)]} />
+                <Line type="monotone" dataKey="combustible"   stroke="#f97316" strokeWidth={2.5} dot={{fill:'#f97316',r:4,strokeWidth:2,stroke:'#131c2e'}} name="Combustible" />
+                <Line type="monotone" dataKey="mantenimiento" stroke="#0ea5e9" strokeWidth={2.5} dot={{fill:'#0ea5e9',r:4,strokeWidth:2,stroke:'#131c2e'}} name="Mantenimiento" />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -1089,10 +1089,10 @@ function DashboardPanel({stats,trucks,fmt}) {
       )}
 
       {stats.ranking.length>0 && (
-        <div className="card p-6">
+        <div className="bg-[#131c2e] border border-slate-800 rounded-2xl p-6">
           <div className="mb-5">
-            <h3 className="font-display font-black text-base uppercase tracking-tight" style={{color:'var(--navy)'}}>Ranking de Unidades</h3>
-            <p className="text-[10px] mt-0.5" style={{color:'var(--oxford)'}}>Mayor egreso en el período</p>
+            <h3 className="font-display font-black text-base uppercase tracking-tight text-white">Ranking de Unidades</h3>
+            <p className="text-[10px] mt-0.5 text-slate-400">Mayor egreso en el período</p>
           </div>
           <div className="space-y-2">
             {stats.ranking.map((t, i) => {
@@ -1102,14 +1102,14 @@ function DashboardPanel({stats,trucks,fmt}) {
               const medals = ['🥇','🥈','🥉'];
               return (
                 <div key={t.id} className="grid grid-cols-12 gap-2 items-center px-3 py-3 rounded-xl"
-                  style={{background:i===0?'rgba(37,99,235,.04)':'transparent',border:i===0?'1px solid rgba(37,99,235,.1)':'1px solid transparent'}}>
-                  <span className="col-span-1 text-base">{medals[i]||<span className="font-mono font-bold text-xs" style={{color:'var(--oxford)'}}>{i+1}</span>}</span>
+                  style={{background:i===0?'rgba(37,99,235,.1)':'transparent',border:i===0?'1px solid rgba(37,99,235,.2)':'1px solid transparent'}}>
+                  <span className="col-span-1 text-base">{medals[i]||<span className="font-mono font-bold text-xs text-slate-500">{i+1}</span>}</span>
                   <div className="col-span-3">
-                    <p className="font-display font-bold text-xs uppercase" style={{color:'var(--navy)'}}>{t.patente}</p>
-                    <p className="text-[9px]" style={{color:'var(--oxford)'}}>{t.chofer}</p>
+                    <p className="font-display font-bold text-xs uppercase text-white">{t.patente}</p>
+                    <p className="text-[9px] text-slate-400">{t.chofer}</p>
                   </div>
                   <div className="col-span-4">
-                    <div className="h-2 rounded-full overflow-hidden flex" style={{background:'var(--ice)'}}>
+                    <div className="h-2 rounded-full overflow-hidden flex bg-slate-800/50">
                       <div className="h-full" style={{width:`${fuelPct}%`,background:'#0ea5e9'}}/>
                       <div className="h-full" style={{width:`${maintPct}%`,background:'#f97316'}}/>
                     </div>
@@ -1119,10 +1119,10 @@ function DashboardPanel({stats,trucks,fmt}) {
                     </div>
                   </div>
                   <div className="col-span-2 text-right">
-                    <p className="font-mono font-bold text-xs" style={{color:'var(--navy)'}}>{fmt(t.total)}</p>
+                    <p className="font-mono font-bold text-xs text-white">{fmt(t.total)}</p>
                   </div>
                   <div className="col-span-2 text-right">
-                    <span className="inline-block px-2 py-0.5 rounded-lg text-[9px] font-bold" style={{background:'rgba(37,99,235,.08)',color:'var(--accent)'}}>{pct.toFixed(1)}%</span>
+                    <span className="inline-block px-2 py-0.5 rounded-lg text-[9px] font-bold text-blue-400 bg-blue-500/10">{pct.toFixed(1)}%</span>
                   </div>
                 </div>
               );
@@ -2399,14 +2399,14 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
 
 function SubKpi({label,value,Icon,accent,bg,border,suffix,mono}) {
   return (
-    <div className="kpi-sub p-5 flex flex-col justify-between" style={{minHeight:130}}>
+    <div className="bg-[#131c2e] border border-slate-800 rounded-2xl p-5 flex flex-col justify-between transition-all hover:border-slate-700" style={{minHeight:130}}>
       <div className="flex items-center justify-between mb-3">
-        <div className="p-2 rounded-xl" style={{background:bg,border:`1px solid ${border}`}}><Icon size={13} style={{color:accent}} /></div>
-        {suffix&&<span className="text-[7px] font-bold uppercase tracking-widest" style={{color:'var(--mist)'}}>{suffix}</span>}
+        <div className={`p-2 rounded-xl ${bg} ${border}`}><Icon size={13} className={accent} /></div>
+        {suffix&&<span className="text-[7px] font-bold uppercase tracking-widest text-slate-500">{suffix}</span>}
       </div>
       <div>
-        <p className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{color:'var(--oxford)'}}>{label}</p>
-        <p className={`font-extrabold text-xl tracking-tight ${mono?'font-mono font-data':''}`} style={{color:'var(--navy)'}}>{value}</p>
+        <p className="text-[8px] font-bold uppercase tracking-widest mb-1 text-slate-400">{label}</p>
+        <p className={`font-bold text-2xl tracking-tight text-white truncate ${mono?'font-mono font-data':''}`}>{value}</p>
       </div>
     </div>
   );
