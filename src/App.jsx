@@ -362,55 +362,57 @@ export default function App() {
         const res = await fetch(GOOGLE_SHEET_CSV_URL);
         const text = await res.text();
         
-        // 1. Detectar automáticamente si usa coma o punto y coma
+        // Detectamos si el CSV usa coma o punto y coma
         const firstLine = text.split('\n')[0];
         const separator = firstLine.includes(';') ? ';' : ',';
         
-        const rows = text.trim().split('\n').slice(1); // Omitir encabezado
+        const rows = text.trim().split('\n');
+        
+        // Filtrar filas vacías, encabezados y el total general
+        const dataRows = rows.filter((row, index) => {
+          if (index === 0) return false; // Omitir títulos de arriba
+          const cleanRow = row.replace(/^"|"$/g, '').trim();
+          if (!cleanRow) return false;
+          const cols = row.split(separator);
+          const name = cols[0]?.toUpperCase() || '';
+          return !name.includes('VENDEDOR') && !name.includes('TOTAL');
+        });
 
-        // Lógica interna para limpiar cualquier formato de número argentino
+        // Función para limpiar números de Argentina ($ 19.500.000 o con comas decimales)
         const cleanNum = (str) => {
           if (!str) return 0;
-          let clean = String(str).replace(/[\s"$%]/g, '');
+          let clean = str.replace(/[\s"$%]/g, ''); // Quita $, %, comillas y espacios
           if (clean.includes(',') && clean.includes('.')) {
-            clean = clean.replace(/\./g, '').replace(',', '.');
+            clean = clean.replace(/\./g, '').replace(',', '.'); // Quita puntos de miles, cambia coma por punto decimal
           } else if (clean.includes(',')) {
             clean = clean.replace(',', '.');
           }
           return parseFloat(clean) || 0;
         };
 
-        const parsed = rows.map(row => {
-          // Separar usando el separador detectado automáticamente
-          const columns = row.split(separator);
-          if (columns.length < 4) return null;
+        const parsed = dataRows.map(row => {
+          const columns = row.split(separator).map(c => c.replace(/^"|"$/g, '').trim());
+          if (columns.length < 5) return null;
+
+          // MAPEO ESTRICTO POR COLUMNA DE TU EXCEL
+          const objVol = cleanNum(columns[2]); // Columna C: Objetivo
+          const ventAct = cleanNum(columns[3]); // Columna D: Avance
+          const subRechazo = cleanNum(columns[4]); // Columna E: Rechazo
+          const pedTotales = cleanNum(columns[5]); // Columna F: Pedidos Acumulados
 
           return {
             id: Math.random().toString(36).substr(2, 9),
-            nombre: columns[0]?.replace(/^"|"$/g, '').trim() || 'Desconocido', // vendedor
-            zona: 'Distribución', // Zona fija para el diseño
-            clientesActivos: cleanNum(columns[1]),
-            objetivoVolumen: cleanNum(columns[2]),
-            ventaActual: cleanNum(columns[3]),
-            coberturaPorcentaje: cleanNum(columns[4]),
-            rechazoAcumulado: cleanNum(columns[5]),
-            rechazoPorcentaje: cleanNum(columns[6]),
-            pedidosTotales: cleanNum(columns[7]), // Sincronizado con el componente
-            pedidosRechazados: cleanNum(columns[5]) > 0 ? Math.round(cleanNum(columns[7]) * (cleanNum(columns[6])/100)) : 0
+            nombre: columns[0] || 'Desconocido', // Columna A: Nombre Vendedor
+            clientesActivos: cleanNum(columns[1]), // Columna B: Clientes Activos
+            objetivoVolumen: objVol,
+            ventaActual: ventAct,
+            pedidosTotales: pedTotales,
+            pedidosRechazados: subRechazo > 0 ? 1 : 0, // Control interno para evitar alertas erróneas
+            zona: 'Distribución'
           };
-        }).filter(Boolean); // Evita vacíos
+        }).filter(Boolean);
 
         setVendedoresData(parsed);
-      } else {
-        // ── Datos MOCK (se usan mientras no haya URL real) ──────────────────────
-        setVendedoresData([
-          { id:'1', nombre:'Marcos Díaz',     zona:'Norte',   objetivoVolumen:120000, ventaActual:98400,  clientesActivos:34, pedidosTotales:87,  pedidosRechazados:4  },
-          { id:'2', nombre:'Laura Suárez',    zona:'Centro',  objetivoVolumen:150000, ventaActual:142500, clientesActivos:52, pedidosTotales:114, pedidosRechazados:6  },
-          { id:'3', nombre:'Roberto Acuña',   zona:'Sur',     objetivoVolumen:90000,  ventaActual:54000,  clientesActivos:21, pedidosTotales:59,  pedidosRechazados:12 },
-          { id:'4', nombre:'Paola Méndez',    zona:'Oeste',   objetivoVolumen:110000, ventaActual:107800, clientesActivos:41, pedidosTotales:96,  pedidosRechazados:3  },
-          { id:'5', nombre:'Sebastián Ríos',  zona:'Este',    objetivoVolumen:130000, ventaActual:78000,  clientesActivos:29, pedidosTotales:71,  pedidosRechazados:9  },
-          { id:'6', nombre:'Camila Torres',   zona:'Centro',  objetivoVolumen:100000, ventaActual:101200, clientesActivos:38, pedidosTotales:88,  pedidosRechazados:2  },
-        ]);
       }
     } catch (err) {
       console.error('Error al cargar vendedores:', err);
