@@ -353,7 +353,7 @@ export default function App() {
   // └─────────────────────────────────────────────────────────────────────────────┘
 
   // COLOCAR AQUÍ LA URL DE GOOGLE SHEETS PUBLICADA COMO CSV
-  const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRGd3hd3Ibuo__v1UTYJVCdO-gtgK0JxiFNkachDvt1a2YSMGU5z4YlGfYiANjZYS0G0TqFeFGEF5t3/pub?output=csv";
+  const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRGd3hd3Ibuo__v1UTYJVCdO-gtgK0JxiFNkachDvt1a2YSMGU5z4YlGfYiANjZYS0G0TqFeFGEF5t3/pub?gid=0&single=true&output=csv";
 
   const fetchExcelData = async () => {
     setVendedoresLoading(true);
@@ -366,25 +366,10 @@ export default function App() {
         
         if (rows.length < 2) return;
 
-        // 1. Extraer y limpiar los encabezados pasándolos a mayúsculas
-        const headers = rows[0].split(';').map(h => h.replace(/^"|"$/g, '').trim().toUpperCase());
-
-        // 2. Buscar índices de columnas por nombres exactos
-        const idxVendedor        = headers.findIndex(h => h.includes('VENDEDOR'));
-        const idxClientesActivos = headers.findIndex(h => h.includes('CLIENTES ACTIVOS'));
-        const idxObjetivo        = headers.findIndex(h => h.includes('OBJETIVO VOL'));
-        const idxAvance          = headers.findIndex(h => h.includes('AVANCE VOL'));
-        const idxCobertura       = headers.findIndex(h => h.includes('COBERTURA %'));
-        const idxRechazoAcumul   = headers.findIndex(h => h.includes('RECHAZO ACUMUL'));
-        const idxPctRechazo      = headers.findIndex(h => h.includes('% RECHA DEL MES'));
-        const idxPedidos         = headers.findIndex(h => h.includes('PEDIDOS ACUMULAD'));
-
-        // Lector de números que limpia formatos numéricos de Argentina
-        const parseArgNumber = (val) => {
-          if (!val) return 0;
-          // Quita espacios, comillas, el signo $ y el porcentaje %
-          let clean = String(val).replace(/[\s"$%]/g, '');
-          // Cambiamos puntos de miles por vacío y comas decimales por punto para JavaScript
+        // Lógica firme para limpiar números con formato argentino
+        const cleanNum = (str) => {
+          if (!str) return 0;
+          let clean = String(str).replace(/[\s"$%]/g, '');
           if (clean.includes(',') && clean.includes('.')) {
             clean = clean.replace(/\./g, '').replace(',', '.');
           } else if (clean.includes(',')) {
@@ -394,29 +379,29 @@ export default function App() {
         };
 
         const parsed = rows.slice(1).map((row, index) => {
-          // 3. Separar por punto y coma y limpiar comillas en cada celda
-          const cols = row.split(';').map(c => c.replace(/^"|"$/g, '').trim());
+          const columns = row.split(';');
           
-          const getVal = (idx) => idx !== -1 && cols[idx] !== undefined ? cols[idx] : '';
+          // Ignorar la fila de cabecera en el slice si aparece de nuevo, filas vacías o cortadas
+          if (columns.length < 4 || (columns[0] && columns[0].toUpperCase().includes('VENDEDOR'))) return null;
 
-          const pctRechazo   = parseArgNumber(getVal(idxPctRechazo));
-          const totalPedidos = parseArgNumber(getVal(idxPedidos));
+          const rechazoPorcentaje = cleanNum(columns[6]);
+          const pedidosAcumulados = cleanNum(columns[7]);
 
-          // 4. Mapear dinámicamente usando los índices encontrados
+          // Mapeamos las posiciones fijas al formato que requiere la UI
           return {
             id: String(index + 1),
-            nombre: getVal(idxVendedor),
+            nombre: columns[0]?.replace(/^"|"$/g, '').trim() || 'Desconocido', // vendedor
             zona: 'General',
-            clientesActivos: parseArgNumber(getVal(idxClientesActivos)),
-            objetivoVolumen: parseArgNumber(getVal(idxObjetivo)),
-            ventaActual: parseArgNumber(getVal(idxAvance)),
-            coberturaPct: parseArgNumber(getVal(idxCobertura)),
-            montoRechazado: parseArgNumber(getVal(idxRechazoAcumul)),
-            rechazoPct: pctRechazo,
-            pedidosTotales: totalPedidos,
-            pedidosRechazados: Math.round((pctRechazo / 100) * totalPedidos) || 0
+            clientesActivos: cleanNum(columns[1]),
+            objetivoVolumen: cleanNum(columns[2]),
+            ventaActual: cleanNum(columns[3]),
+            coberturaPct: cleanNum(columns[4]), // coberturaPorcentaje
+            montoRechazado: cleanNum(columns[5]), // rechazoAcumulado
+            rechazoPct: rechazoPorcentaje,
+            pedidosTotales: pedidosAcumulados,
+            pedidosRechazados: Math.round((rechazoPorcentaje / 100) * pedidosAcumulados) || 0
           };
-        }).filter(v => v.nombre && !v.nombre.toUpperCase().includes('TOTAL GENERAL')); // Evita vacíos o fila de total
+        }).filter(v => v !== null && !v.nombre.toUpperCase().includes('TOTAL GENERAL')); // Evita vacíos y "Total general"
 
         setVendedoresData(parsed);
       } else {
