@@ -53,10 +53,10 @@ const ALERT_THRESHOLDS = {
 };
 
 const STATUS_META = {
-  disponible: { label:'Disponible', color:'var(--success)', bg:'#f0fdf4', border:'#bbf7d0' },
-  en_viaje:   { label:'En Viaje',   color:'var(--accent)',  bg:'#eff6ff', border:'#bfdbfe' },
-  en_taller:  { label:'En Taller',  color:'var(--warn)',     bg:'#fffbeb', border:'#fde68a' },
-  inactivo:   { label:'Inactivo',   color:'var(--oxford)',  bg:'var(--ice)', border:'var(--mist)' },
+  disponible: { label:'Disponible', color:'#34d399', bg:'rgba(16,185,129,0.1)', border:'rgba(16,185,129,0.2)' },
+  en_viaje:   { label:'En Viaje',   color:'#60a5fa',  bg:'rgba(59,130,246,0.1)', border:'rgba(59,130,246,0.2)' },
+  en_taller:  { label:'En Taller',  color:'#fbbf24',  bg:'rgba(245,158,11,0.1)', border:'rgba(245,158,11,0.2)' },
+  inactivo:   { label:'Inactivo',   color:'#94a3b8',  bg:'rgba(148,163,184,0.1)', border:'rgba(148,163,184,0.2)' },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -134,54 +134,6 @@ const globalStyles = `
     --cb-ok:      #34d399;
   }
 
-  /* Blue Tech section */
-  .cb-section { background: var(--cb-bg); min-height: 100vh; }
-  .cb-card {
-    background: var(--cb-panel);
-    border: 1px solid rgba(51, 65, 85, 0.5);
-    border-radius: 18px;
-    transition: all .25s ease;
-  }
-  .cb-card:hover {
-    border-color: var(--cb-bronze);
-    box-shadow: 0 8px 32px rgba(56,189,248,.12);
-    transform: translateY(-2px);
-  }
-  .cb-label { color: var(--cb-muted); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
-  .cb-value { color: var(--cb-chrome); font-family: 'JetBrains Mono', monospace; font-weight: 700; letter-spacing: -.02em; }
-  .cb-badge {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-weight: 800; font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
-    padding: 2px 8px; border-radius: 8px;
-  }
-  .cb-progress-track {
-    background: rgba(255,255,255,.07);
-    border-radius: 99px; overflow: hidden; height: 8px;
-  }
-  .cb-progress-fill {
-    height: 100%; border-radius: 99px;
-    background: linear-gradient(90deg, #3b82f6, #22d3ee);
-    transition: width .7s cubic-bezier(.34,1.2,.64,1);
-  }
-  .cb-progress-fill.danger {
-    background: linear-gradient(90deg, #ef4444, #f87171);
-  }
-  .cb-progress-fill.ok {
-    background: linear-gradient(90deg, #10b981, #34d399);
-  }
-  .cb-bar-col {
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-    flex: 1;
-  }
-  .cb-bar-inner {
-    width: 100%; border-radius: 6px 6px 0 0;
-    background: linear-gradient(180deg, #38bdf8, #0284c7);
-    transition: height .6s cubic-bezier(.34,1.2,.64,1);
-    min-height: 4px;
-  }
-  @keyframes cbFadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-  .cb-anim { animation: cbFadeUp .5s ease both; }
-
   * { font-family: 'DM Sans', sans-serif; box-sizing: border-box; }
   .font-display { font-family: 'Barlow Condensed', sans-serif; }
   .font-mono    { font-family: 'JetBrains Mono', monospace; }
@@ -240,42 +192,6 @@ const globalStyles = `
     box-shadow: 0 8px 28px rgba(37,99,235,.42);
   }
   .login-btn:hover { background-position: right center; box-shadow: 0 12px 36px rgba(37,99,235,.58); transform: translateY(-1px); }
-
-  .nav-shell {
-    background: rgba(255,255,255,.96); backdrop-filter: blur(20px);
-    border-bottom: 1px solid rgba(37,99,235,.07); box-shadow: 0 1px 16px rgba(11,17,32,.07);
-  }
-  .tab-pill {
-    font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
-    text-transform: uppercase; letter-spacing:.06em; font-size: 11px;
-    transition: all .2s ease; color: var(--oxford);
-    white-space: nowrap;
-  }
-  .tab-pill.active { background: var(--navy); color: white; box-shadow: 0 3px 12px rgba(11,17,32,.25); }
-  .tab-pill:hover:not(.active) { color: var(--navy); background: var(--ice); }
-
-  .card { background: white; border: 1px solid var(--mist); border-radius: 16px; transition: all .25s ease; }
-  .card:hover { border-color: rgba(37,99,235,.18); box-shadow: 0 8px 28px rgba(37,99,235,.09); }
-
-  .kpi-hero {
-    background: linear-gradient(150deg, var(--navy) 0%, var(--navy-3) 100%);
-    border: 1px solid var(--steel); border-radius:18px;
-    box-shadow: 0 16px 48px rgba(11,17,32,.35); position: relative; overflow: hidden;
-  }
-  .kpi-hero::before {
-    content:''; position:absolute; inset:0;
-    background: radial-gradient(ellipse at 20% 50%, rgba(37,99,235,.15) 0%, transparent 60%);
-  }
-  .kpi-sub {
-    background: white; border: 1px solid var(--mist); border-radius: 14px; transition: all .25s ease;
-  }
-  .kpi-sub:hover { border-color: rgba(37,99,235,.2); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(37,99,235,.1); }
-
-  .truck-card {
-    background: white; border: 1px solid var(--mist); border-radius:18px;
-    transition: all .28s cubic-bezier(.34,1.56,.64,1);
-  }
-  .truck-card:hover { transform:translateY(-3px); border-color:rgba(37,99,235,.22); box-shadow: 0 14px 36px rgba(37,99,235,.11); }
 
   .fab {
     box-shadow: 0 8px 28px rgba(37,99,235,.48);
@@ -681,28 +597,26 @@ export default function App() {
         {dbError && <div className="max-w-7xl mx-auto px-4 mt-3"><div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-700 text-sm font-semibold">{dbError}</div></div>}
 
         {/* NAV */}
-        <nav className="nav-shell sticky top-0 z-50 px-4 md:px-6 py-3 flex flex-wrap justify-between items-center gap-3">
+        <nav className="sticky top-0 z-50 px-4 md:px-6 py-3 flex flex-wrap justify-between items-center gap-3 bg-[#0f172a] border-b border-slate-800 shadow-lg">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white float"
-              style={{background:'linear-gradient(135deg,#1d4ed8,#2563eb)',boxShadow:'0 4px 14px rgba(37,99,235,.4)'}}>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white float shadow-[0_4px_14px_rgba(37,99,235,.4)] bg-blue-600">
               <Truck size={17} strokeWidth={2.5} />
             </div>
             <div>
-              <h1 className="font-display font-black text-sm uppercase tracking-tight leading-none" style={{color:'var(--navy)',fontSize:15}}>
-                DISTRIBUIDORA <span style={{color:'var(--accent)'}}>VERACRUZ</span>
+              <h1 className="font-display font-black text-[15px] uppercase tracking-tight leading-none text-white">
+                DISTRIBUIDORA <span className="text-blue-500">VERACRUZ</span>
               </h1>
-              <p className="text-[7px] font-semibold uppercase tracking-widest" style={{color:'var(--oxford)'}}>Sistema de Gestión de Flota</p>
+              <p className="text-[7px] font-semibold uppercase tracking-widest text-slate-400">Sistema de Gestión de Flota</p>
             </div>
           </div>
 
-          <div className="flex bg-slate-100 p-1 rounded-2xl order-last md:order-none w-full md:w-auto justify-start md:justify-center gap-0.5 overflow-x-auto hide-scrollbar">
+          <div className="flex bg-[#131c2e] border border-slate-800/60 p-1 rounded-2xl order-last md:order-none w-full md:w-auto justify-start md:justify-center gap-0.5 overflow-x-auto hide-scrollbar">
             {TABS.map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className={`tab-pill px-4 py-2 rounded-xl flex-1 md:flex-none ${activeTab===tab.id?'active':''}`}>
+                className={`px-4 py-2 rounded-xl flex-1 md:flex-none text-[11px] font-display font-bold uppercase tracking-wider transition-all whitespace-nowrap ${activeTab===tab.id ? 'bg-blue-600/20 text-blue-400' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}>
                 {tab.label}
                 {tab.id==='dashboard' && fleetAlerts.filter(a=>a.severity==='critical').length>0 && (
-                  <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-[7px] font-black text-white"
-                    style={{background:'var(--danger)'}}>
+                  <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-[7px] font-black text-white bg-red-500">
                     {fleetAlerts.filter(a=>a.severity==='critical').length}
                   </span>
                 )}
@@ -711,16 +625,15 @@ export default function App() {
           </div>
 
           <div className="flex gap-1.5 flex-wrap justify-end">
-            <button onClick={handleExportExcel} className="px-3 py-2 rounded-xl text-[10px] font-bold border transition-all"
-              style={{color:'var(--success)',borderColor:'#bbf7d0',background:'#f0fdf4'}}>XLS</button>
+            <button onClick={handleExportExcel} className="px-3 py-2 rounded-xl text-[10px] font-bold border transition-all bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20">XLS</button>
             {userRole===ROLES.ADMIN && (
-              <button onClick={() => setModals(m => ({...m,users:true}))} className="p-2 rounded-xl transition-all hover:bg-blue-50" style={{color:'var(--oxford)'}}><Users size={15}/></button>
+              <button onClick={() => setModals(m => ({...m,users:true}))} className="p-2 rounded-xl transition-all bg-[#131c2e] border border-slate-800/60 text-slate-400 hover:text-white hover:border-slate-600"><Users size={15}/></button>
             )}
             {userRole===ROLES.ADMIN && (
-              <button onClick={() => setModals(m => ({...m,clientes:true}))} className="p-2 rounded-xl transition-all hover:bg-cyan-50" style={{color:'var(--oxford)'}}><Building size={15}/></button>
+              <button onClick={() => setModals(m => ({...m,clientes:true}))} className="p-2 rounded-xl transition-all bg-[#131c2e] border border-slate-800/60 text-slate-400 hover:text-white hover:border-slate-600"><Building size={15}/></button>
             )}
-            <button onClick={handleBackup} className="p-2 rounded-xl transition-all hover:bg-violet-50" style={{color:'var(--oxford)'}}><Clock size={15}/></button>
-            <button onClick={() => signOut(auth)} className="p-2 rounded-xl transition-all hover:bg-red-50" style={{color:'var(--oxford)'}}><LogOut size={15}/></button>
+            <button onClick={handleBackup} className="p-2 rounded-xl transition-all bg-[#131c2e] border border-slate-800/60 text-slate-400 hover:text-white hover:border-slate-600"><Clock size={15}/></button>
+            <button onClick={() => signOut(auth)} className="p-2 rounded-xl transition-all bg-[#131c2e] border border-slate-800/60 text-slate-400 hover:text-red-400 hover:border-red-900/50"><LogOut size={15}/></button>
           </div>
         </nav>
 
@@ -728,14 +641,13 @@ export default function App() {
 
           {/* Cliente activo */}
           {clientes.length>0 && (
-            <div className="p-4 rounded-2xl border" style={{background:'linear-gradient(135deg,#eff6ff,#f0f9ff)',borderColor:'rgba(37,99,235,.15)'}}>
+            <div className="bg-[#131c2e] border border-slate-800/60 rounded-2xl p-4">
               <div className="flex items-center gap-3">
-                <Building size={14} style={{color:'var(--accent)'}} className="shrink-0" />
+                <Building size={14} className="text-blue-500 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{color:'var(--accent)'}}>Cliente Activo</p>
+                  <p className="text-[8px] font-bold uppercase tracking-widest mb-1 text-slate-400">Cliente Activo</p>
                   <select value={selectedClient||''} onChange={e => setSelectedClient(e.target.value)}
-                    className="bg-white border rounded-xl text-sm font-semibold p-1.5 w-full focus:outline-none"
-                    style={{borderColor:'rgba(37,99,235,.2)',color:'var(--navy)'}}>
+                    className="bg-[#0b0f19] border border-slate-800 rounded-xl text-sm font-semibold text-white p-1.5 w-full focus:border-blue-500 focus:outline-none">
                     {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                   </select>
                 </div>
@@ -744,7 +656,7 @@ export default function App() {
           )}
 
           {/* Filtros */}
-          <div className="bg-[#131c2e] border border-slate-800 rounded-2xl p-4">
+          <div className="bg-[#131c2e] border border-slate-800/60 rounded-2xl p-4">
             <div className="flex flex-wrap gap-3">
               <div className="flex-1 min-w-[160px]">
                 <label className="text-[8px] font-bold uppercase tracking-wider mb-1 block text-slate-400">Buscar unidad</label>
@@ -889,13 +801,13 @@ export default function App() {
 function AlertPanel({ alerts }) {
   if (alerts.length === 0) {
     return (
-      <div className="rounded-2xl border p-4 flex items-center gap-3" style={{background:'#f0fdf4',borderColor:'#bbf7d0'}}>
-        <div className="w-9 h-9 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
-          <ShieldCheck size={16} style={{color:'var(--success)'}} />
+      <div className="bg-[#131c2e] border border-slate-800/60 rounded-2xl p-4 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0 border border-emerald-500/20">
+          <ShieldCheck size={16} className="text-emerald-400" />
         </div>
         <div>
-          <p className="font-display font-black text-sm uppercase" style={{color:'var(--success)'}}>Flota al día</p>
-          <p className="text-[9px]" style={{color:'var(--oxford)'}}>Sin alertas activas en este momento</p>
+          <p className="font-display font-black text-sm uppercase text-emerald-400">Flota al día</p>
+          <p className="text-[9px] text-slate-400">Sin alertas activas en este momento</p>
         </div>
       </div>
     );
@@ -915,11 +827,11 @@ function AlertPanel({ alerts }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <AlertTriangle size={14} style={{color:'var(--danger)'}} />
-        <p className="text-[9px] font-bold uppercase tracking-widest" style={{color:'var(--danger)'}}>
+        <AlertTriangle size={14} className="text-red-500" />
+        <p className="text-[9px] font-bold uppercase tracking-widest text-red-500">
           {alerts.length} alerta{alerts.length!==1?'s':''} activa{alerts.length!==1?'s':''}
           {criticals.length>0 && (
-            <span className="ml-2 px-1.5 py-0.5 rounded-full text-white font-bold text-[7px]" style={{background:'var(--danger)'}}>
+            <span className="ml-2 px-1.5 py-0.5 rounded-full text-white font-bold text-[7px] bg-red-500">
               {criticals.length} CRÍTICA{criticals.length!==1?'S':''}
             </span>
           )}
@@ -930,29 +842,25 @@ function AlertPanel({ alerts }) {
           const isCrit = alert.severity==='critical';
           const Icon   = ALERT_ICON[alert.type] || AlertTriangle;
           return (
-            <div key={alert.key} className="rounded-2xl border p-3 flex items-start gap-3"
-              style={{background:isCrit?'#fff1f2':'#fffbeb',borderColor:isCrit?'#fca5a5':'#fcd34d',
-                boxShadow:isCrit?'0 2px 12px rgba(220,38,38,.1)':'none'}}>
-              <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-                style={{background:isCrit?'#fee2e2':'#fef3c7'}}>
-                <Icon size={14} style={{color:isCrit?'var(--danger)':'var(--warn)'}} />
+            <div key={alert.key} className={`rounded-2xl border p-3 flex items-start gap-3 ${isCrit ? 'bg-red-500/10 border-red-500/20' : 'bg-amber-500/10 border-amber-500/20'}`}>
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 border ${isCrit ? 'bg-red-500/20 border-red-500/30' : 'bg-amber-500/20 border-amber-500/30'}`}>
+                <Icon size={14} className={isCrit ? 'text-red-400' : 'text-amber-400'} />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1 mb-0.5">
-                  <span className="text-[7px] font-black uppercase px-1.5 py-0.5 rounded-full"
-                    style={{background:isCrit?'#fee2e2':'#fef9c3',color:isCrit?'var(--danger)':'#a16207'}}>
+                  <span className={`text-[7px] font-black uppercase px-1.5 py-0.5 rounded-full ${isCrit ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'}`}>
                     {isCrit?'CRÍTICO':'AVISO'}
                   </span>
-                  <span className="text-[7px] font-bold uppercase" style={{color:'var(--oxford)'}}>{ALERT_CAT[alert.type]||'Alerta'}</span>
+                  <span className="text-[7px] font-bold uppercase text-slate-400">{ALERT_CAT[alert.type]||'Alerta'}</span>
                 </div>
-                <p className="font-display font-black text-xs uppercase leading-tight" style={{color:'var(--navy)'}}>
-                  {alert.patente}{alert.chofer&&<span className="font-sans font-normal normal-case ml-1" style={{color:'var(--oxford)'}}>— {alert.chofer}</span>}
+                <p className="font-display font-black text-xs uppercase leading-tight text-white">
+                  {alert.patente}{alert.chofer&&<span className="font-sans font-normal normal-case ml-1 text-slate-400">— {alert.chofer}</span>}
                 </p>
-                <p className="text-[9px] mt-0.5 font-medium leading-snug" style={{color:'var(--steel)'}}>{alert.message}</p>
+                <p className="text-[9px] mt-0.5 font-medium leading-snug text-slate-300">{alert.message}</p>
                 {alert.daysRemaining!==undefined && (
                   <div className="flex items-center gap-1 mt-1">
-                    <Clock size={9} style={{color:isCrit?'var(--danger)':'var(--warn)'}} />
-                    <span className="text-[8px] font-bold" style={{color:isCrit?'var(--danger)':'var(--warn)'}}>
+                    <Clock size={9} className={isCrit ? 'text-red-400' : 'text-amber-400'} />
+                    <span className={`text-[8px] font-bold ${isCrit ? 'text-red-400' : 'text-amber-400'}`}>
                       {alert.daysRemaining<0?`Expiró el ${alert.rawValue}`:`Vence: ${alert.rawValue}`}
                     </span>
                   </div>
@@ -975,7 +883,7 @@ function DashboardPanel({stats,trucks,fmt}) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="col-span-2 lg:col-span-1 bg-[#131c2e] border border-slate-800 rounded-2xl p-6 flex flex-col justify-between transition-all hover:border-slate-700" style={{minHeight:148}}>
+        <div className="col-span-2 lg:col-span-1 bg-[#131c2e] border border-slate-800/60 rounded-2xl p-6 flex flex-col justify-between transition-all hover:border-slate-700" style={{minHeight:148}}>
           <div className="relative flex items-center justify-between mb-4">
             <div className="p-2 rounded-xl bg-blue-500/10"><DollarSign size={14} className="text-blue-400" /></div>
             <span className="text-[7px] font-bold uppercase tracking-widest px-2 py-1 rounded-full text-blue-400 bg-blue-500/10">Período</span>
@@ -995,7 +903,7 @@ function DashboardPanel({stats,trucks,fmt}) {
           {label:'Combustible',   emoji:'⛽', pct:combustiblePct,   val:stats.pieData.find((d)=>d.name==='Combustible')?.value||0,   color:'text-sky-400', bg:'bg-sky-500/10', border:'bg-slate-800', barColor:'linear-gradient(90deg,#38bdf8,#0ea5e9)', textC: 'text-sky-400'},
           {label:'Mantenimiento', emoji:'🔧', pct:mantenimientoPct, val:stats.pieData.find((d)=>d.name==='Mantenimiento')?.value||0, color:'text-blue-500', bg:'bg-blue-500/10', border:'bg-slate-800', barColor:'linear-gradient(90deg,#60a5fa,#2563eb)', textC: 'text-blue-500'},
         ].map(item => (
-          <div key={item.label} className="bg-[#131c2e] border border-slate-800 rounded-2xl p-5">
+          <div key={item.label} className="bg-[#131c2e] border border-slate-800/60 rounded-2xl p-5">
             <div className="flex items-center gap-2 mb-3">
               <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm ${item.bg}`}>{item.emoji}</div>
               <div>
@@ -1012,7 +920,7 @@ function DashboardPanel({stats,trucks,fmt}) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-        <div className="lg:col-span-3 bg-[#131c2e] border border-slate-800 rounded-2xl p-6">
+        <div className="lg:col-span-3 bg-[#131c2e] border border-slate-800/60 rounded-2xl p-6">
           <div className="flex items-start justify-between mb-5">
             <div>
               <h3 className="font-display font-black text-base uppercase tracking-tight text-white">Costos por Unidad</h3>
@@ -1037,7 +945,7 @@ function DashboardPanel({stats,trucks,fmt}) {
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="lg:col-span-2 bg-[#131c2e] border border-slate-800 rounded-2xl p-6 flex flex-col">
+        <div className="lg:col-span-2 bg-[#131c2e] border border-slate-800/60 rounded-2xl p-6 flex flex-col">
           <div className="mb-4">
             <h3 className="font-display font-black text-base uppercase tracking-tight text-white">Distribución</h3>
             <p className="text-[10px] mt-0.5 text-slate-400">Combustible vs Mantenimiento</p>
@@ -1066,7 +974,7 @@ function DashboardPanel({stats,trucks,fmt}) {
       </div>
 
       {stats.trendData.length>1 && (
-        <div className="bg-[#131c2e] border border-slate-800 rounded-2xl p-6">
+        <div className="bg-[#131c2e] border border-slate-800/60 rounded-2xl p-6">
           <div className="flex items-start justify-between mb-5">
             <div>
               <h3 className="font-display font-black text-base uppercase tracking-tight text-white">Tendencia Mensual</h3>
@@ -1089,7 +997,7 @@ function DashboardPanel({stats,trucks,fmt}) {
       )}
 
       {stats.ranking.length>0 && (
-        <div className="bg-[#131c2e] border border-slate-800 rounded-2xl p-6">
+        <div className="bg-[#131c2e] border border-slate-800/60 rounded-2xl p-6">
           <div className="mb-5">
             <h3 className="font-display font-black text-base uppercase tracking-tight text-white">Ranking de Unidades</h3>
             <p className="text-[10px] mt-0.5 text-slate-400">Mayor egreso en el período</p>
@@ -1154,44 +1062,44 @@ function FuelPanel({priceEvolution, history, trucks, fmt, fmtN}) {
   return (
     <div className="space-y-5 anim-up">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="kpi-hero p-6 flex flex-col justify-between" style={{minHeight:150}}>
+        <div className="bg-[#131c2e] border border-slate-800/60 rounded-2xl p-6 flex flex-col justify-between" style={{minHeight:150}}>
           <div className="relative flex items-center justify-between mb-3">
-            <div className="p-2 rounded-xl" style={{background:'rgba(14,165,233,.25)'}}><Fuel size={15} style={{color:'#7dd3fc'}} /></div>
-            <span className="text-[7px] font-bold uppercase tracking-widest px-2 py-1 rounded-full" style={{color:'#7dd3fc',background:'rgba(14,165,233,.18)'}}>Total</span>
+            <div className="p-2 rounded-xl bg-blue-500/10"><Fuel size={15} className="text-blue-400" /></div>
+            <span className="text-[7px] font-bold uppercase tracking-widest px-2 py-1 rounded-full text-blue-400 bg-blue-500/10">Total</span>
           </div>
           <div className="relative">
-            <p className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{color:'rgba(255,255,255,.4)'}}>Gasto en Combustible</p>
+            <p className="text-[8px] font-bold uppercase tracking-widest mb-1 text-slate-400">Gasto en Combustible</p>
             <p className="font-data text-3xl text-white leading-none">{fmt(totalSpent)}</p>
           </div>
         </div>
-        <div className="kpi-hero p-6 flex flex-col justify-between" style={{minHeight:150}}>
+        <div className="bg-[#131c2e] border border-slate-800/60 rounded-2xl p-6 flex flex-col justify-between" style={{minHeight:150}}>
           <div className="relative flex items-center justify-between mb-3">
-            <div className="p-2 rounded-xl" style={{background:'rgba(14,165,233,.25)'}}><Activity size={15} style={{color:'#7dd3fc'}} /></div>
+            <div className="p-2 rounded-xl bg-blue-500/10"><Activity size={15} className="text-blue-400" /></div>
           </div>
           <div className="relative">
-            <p className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{color:'rgba(255,255,255,.4)'}}>Litros Totales</p>
+            <p className="text-[8px] font-bold uppercase tracking-widest mb-1 text-slate-400">Litros Totales</p>
             <p className="font-data text-3xl text-white leading-none">{totalLitros.toLocaleString('es-AR',{maximumFractionDigits:0})}</p>
-            <p className="text-[10px] mt-1" style={{color:'rgba(255,255,255,.35)'}}>litros cargados</p>
+            <p className="text-[10px] mt-1 text-slate-500">litros cargados</p>
           </div>
         </div>
-        <div className="kpi-hero p-6 flex flex-col justify-between" style={{minHeight:150}}>
+        <div className="bg-[#131c2e] border border-slate-800/60 rounded-2xl p-6 flex flex-col justify-between" style={{minHeight:150}}>
           <div className="relative flex items-center justify-between mb-3">
-            <div className="p-2 rounded-xl" style={{background:'rgba(14,165,233,.25)'}}><DollarSign size={15} style={{color:'#7dd3fc'}} /></div>
+            <div className="p-2 rounded-xl bg-blue-500/10"><DollarSign size={15} className="text-blue-400" /></div>
           </div>
           <div className="relative">
-            <p className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{color:'rgba(255,255,255,.4)'}}>Precio Promedio</p>
+            <p className="text-[8px] font-bold uppercase tracking-widest mb-1 text-slate-400">Precio Promedio</p>
             <p className="font-data text-3xl text-white leading-none">{fmt(avgPrice)}</p>
-            <p className="text-[10px] mt-1" style={{color:'rgba(255,255,255,.35)'}}>por litro (histórico)</p>
+            <p className="text-[10px] mt-1 text-slate-500">por litro (histórico)</p>
           </div>
         </div>
       </div>
 
       {priceEvolution.length>1 && (
-        <div className="card p-6">
+        <div className="bg-[#131c2e] border border-slate-800/60 rounded-2xl p-6">
           <div className="flex items-start justify-between mb-5">
             <div>
-              <h3 className="font-display font-black text-base uppercase tracking-tight" style={{color:'var(--navy)'}}>Evolución Precio por Litro</h3>
-              <p className="text-[10px] mt-0.5" style={{color:'var(--oxford)'}}>Últimas {priceEvolution.length} cargas registradas</p>
+              <h3 className="font-display font-black text-base uppercase tracking-tight text-white">Evolución Precio por Litro</h3>
+              <p className="text-[10px] mt-0.5 text-slate-400">Últimas {priceEvolution.length} cargas registradas</p>
             </div>
           </div>
           <div className="h-[200px]">
@@ -1199,15 +1107,15 @@ function FuelPanel({priceEvolution, history, trucks, fmt, fmtN}) {
               <AreaChart data={priceEvolution}>
                 <defs>
                   <linearGradient id="fuelGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#0ea5e9" stopOpacity={0.18}/>
-                    <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
+                    <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.18}/>
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f8fafc" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
                 <XAxis dataKey="fecha" axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} />
                 <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} tickFormatter={(v) => `$${(v/1000).toFixed(1)}k`} />
-                <Tooltip contentStyle={{background:'var(--navy)',border:'none',borderRadius:10,color:'white',fontSize:11}} formatter={(v) => [`$${Number(v).toLocaleString('es-AR')} /L`,'Precio']} />
-                <Area type="monotone" dataKey="precio" stroke="#0ea5e9" strokeWidth={2.5} fill="url(#fuelGrad)" dot={{fill:'#0ea5e9',r:3,strokeWidth:2,stroke:'white'}} name="Precio/L" />
+                <Tooltip contentStyle={{background:'#0f172a',border:'1px solid #1e293b',borderRadius:10,color:'white',fontSize:11}} formatter={(v) => [`$${Number(v).toLocaleString('es-AR')} /L`,'Precio']} />
+                <Area type="monotone" dataKey="precio" stroke="#3b82f6" strokeWidth={2.5} fill="url(#fuelGrad)" dot={{fill:'#3b82f6',r:3,strokeWidth:2,stroke:'#131c2e'}} name="Precio/L" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -1215,35 +1123,35 @@ function FuelPanel({priceEvolution, history, trucks, fmt, fmtN}) {
       )}
 
       {byTruck.length>0 && (
-        <div className="card overflow-hidden">
-          <div className="p-5 border-b" style={{borderColor:'var(--mist)',background:'var(--ice)'}}>
-            <h3 className="font-display font-black text-base uppercase tracking-tight" style={{color:'var(--navy)'}}>Combustible por Unidad</h3>
+        <div className="bg-[#131c2e] border border-slate-800/60 rounded-2xl overflow-hidden">
+          <div className="p-5 border-b border-slate-800 bg-[#0f172a]">
+            <h3 className="font-display font-black text-base uppercase tracking-tight text-white">Combustible por Unidad</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[500px]">
-              <thead style={{background:'var(--ice)'}}>
-                <tr className="border-b" style={{borderColor:'var(--mist)'}}>
+              <thead className="bg-[#0f172a] border-b border-slate-800">
+                <tr>
                   {['Unidad','Conductor','Cargas','Litros','Gasto Total','Precio Prom./L'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-[8px] font-bold uppercase tracking-wider" style={{color:'var(--oxford)'}}>{h}</th>
+                    <th key={h} className="px-4 py-3 text-left text-[8px] font-bold uppercase tracking-wider text-slate-400">{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y" style={{borderColor:'var(--mist)'}}>
+              <tbody className="divide-y divide-slate-800/50">
                 {byTruck.map(t => (
-                  <tr key={t.id} className="history-row transition-colors">
+                  <tr key={t.id} className="transition-colors hover:bg-[#0b0f19]">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{background:'#f0f9ff',border:'1px solid #bae6fd'}}>
-                          <span className="font-display font-black text-[9px]" style={{color:'var(--fuel)'}}>{t.patente.slice(-3)}</span>
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-blue-500/10 border border-blue-500/20">
+                          <span className="font-display font-black text-[9px] text-blue-400">{t.patente.slice(-3)}</span>
                         </div>
-                        <span className="font-display font-bold text-xs uppercase" style={{color:'var(--navy)'}}>{t.patente}</span>
+                        <span className="font-display font-bold text-xs uppercase text-white">{t.patente}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-xs" style={{color:'var(--oxford)'}}>{t.chofer||'—'}</td>
-                    <td className="px-4 py-3 font-mono font-bold text-xs" style={{color:'var(--navy)'}}>{t.loads}</td>
-                    <td className="px-4 py-3 font-mono font-bold text-xs" style={{color:'var(--navy)'}}>{t.litros.toLocaleString('es-AR',{maximumFractionDigits:0})} L</td>
-                    <td className="px-4 py-3 font-mono font-bold text-xs" style={{color:'var(--navy)'}}>{fmt(t.monto)}</td>
-                    <td className="px-4 py-3 font-mono font-bold text-xs" style={{color:'var(--fuel)'}}>{fmt(t.avgPrice)}/L</td>
+                    <td className="px-4 py-3 text-xs text-slate-400">{t.chofer||'—'}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-xs text-white">{t.loads}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-xs text-white">{t.litros.toLocaleString('es-AR',{maximumFractionDigits:0})} L</td>
+                    <td className="px-4 py-3 font-mono font-bold text-xs text-white">{fmt(t.monto)}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-xs text-blue-400">{fmt(t.avgPrice)}/L</td>
                   </tr>
                 ))}
               </tbody>
@@ -1280,17 +1188,11 @@ function FlotaPanel({stats, setModals}) {
           const count = f.value ? stats.truckStats.filter((t)=>t.status===f.value).length : stats.truckStats.length;
           return (
             <button key={f.value} onClick={() => setStatusFilter(f.value)}
-              className="px-3 py-1.5 rounded-xl font-bold text-[9px] uppercase border-2 transition-all flex items-center gap-1.5"
-              style={statusFilter===f.value
-                ? {background:meta?.color||'var(--navy)',color:'white',borderColor:meta?.color||'var(--navy)'}
-                : {background:'white',color:'var(--oxford)',borderColor:'var(--mist)'}
-              }>
+              className={`px-3 py-1.5 rounded-xl font-bold text-[9px] uppercase border transition-all flex items-center gap-1.5 ${statusFilter===f.value ? 'bg-blue-600/20 border-blue-500/30 text-blue-400' : 'bg-[#131c2e] border-slate-800/60 text-slate-400 hover:border-slate-700'}`}>
               {f.label}
-              <span className="px-1.5 py-0.5 rounded-full text-[7px] font-black"
-                style={statusFilter===f.value
-                  ? {background:'rgba(255,255,255,.25)',color:'white'}
-                  : {background:'var(--ice)',color:'var(--oxford)'}
-                }>{count}</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[7px] font-black ${statusFilter===f.value ? 'bg-blue-500/30 text-white' : 'bg-[#0f172a] text-slate-400'}`}>
+                {count}
+              </span>
             </button>
           );
         })}
@@ -1303,12 +1205,11 @@ function FlotaPanel({stats, setModals}) {
             onEdit={()   => setModals((m) => ({...m,editTruck:truck}))} />
         ))}
         <button onClick={() => setModals((m) => ({...m,truck:true}))}
-          className="group border-2 border-dashed rounded-[20px] p-8 flex flex-col items-center justify-center gap-3 transition-all min-h-[240px]"
-          style={{borderColor:'var(--mist)'}}>
-          <div className="w-12 h-12 rounded-full flex items-center justify-center shadow-inner" style={{background:'var(--ice)'}}>
-            <Plus size={22} style={{color:'var(--mist)'}} />
+          className="group border border-dashed border-slate-700 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 transition-all min-h-[240px] hover:border-blue-500 hover:bg-[#131c2e]">
+          <div className="w-12 h-12 rounded-full flex items-center justify-center bg-[#0b0f19]">
+            <Plus size={22} className="text-slate-500 group-hover:text-blue-400" />
           </div>
-          <span className="text-[9px] font-bold uppercase tracking-widest" style={{color:'var(--oxford)'}}>Añadir Unidad</span>
+          <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500 group-hover:text-blue-400">Añadir Unidad</span>
         </button>
       </div>
     </div>
@@ -1324,70 +1225,69 @@ function TruckCard({truck, onDelete, onEdit}) {
   const statusMeta = STATUS_META[truck.status] || STATUS_META.disponible;
 
   return (
-    <div className="truck-card p-5">
+    <div className="bg-[#131c2e] border border-slate-800/60 rounded-[18px] p-5 transition-all hover:-translate-y-1 hover:border-blue-500/40 hover:shadow-[0_8px_30px_rgba(59,130,246,0.15)]">
       <div className="flex justify-between items-start mb-4">
         <div className="flex gap-3">
-          <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{background:'linear-gradient(135deg,#eff6ff,#dbeafe)',border:'1px solid #bfdbfe'}}>
-            <span className="font-display font-black text-xs uppercase" style={{color:'var(--accent)'}}>{truck.patente.slice(-3)}</span>
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 bg-blue-500/10 border border-blue-500/20">
+            <span className="font-display font-black text-xs uppercase text-blue-400">{truck.patente.slice(-3)}</span>
           </div>
           <div>
-            <h3 className="font-display font-black text-base uppercase leading-tight" style={{color:'var(--navy)'}}>{truck.chofer||'Sin chofer'}</h3>
-            <p className="text-[8px] font-bold mt-0.5 uppercase tracking-widest" style={{color:'var(--oxford)'}}>{truck.patente}</p>
+            <h3 className="font-display font-black text-base uppercase leading-tight text-white">{truck.chofer||'Sin chofer'}</h3>
+            <p className="text-[8px] font-bold mt-0.5 uppercase tracking-widest text-slate-400">{truck.patente}</p>
             {(truck.marca||truck.modelo) && (
-              <p className="text-[8px] mt-0.5" style={{color:'var(--oxford)'}}>{truck.marca} {truck.modelo} {truck.anio?`(${truck.anio})`:''}</p>
+              <p className="text-[8px] mt-0.5 text-slate-500">{truck.marca} {truck.modelo} {truck.anio?`(${truck.anio})`:''}</p>
             )}
           </div>
         </div>
         <div className="flex gap-1">
-          <button onClick={onEdit}   className="p-1.5 rounded-lg transition-all hover:bg-blue-50" style={{color:'var(--mist)'}}><Edit2 size={13}/></button>
-          <button onClick={onDelete} className="p-1.5 rounded-lg transition-all hover:bg-red-50"  style={{color:'var(--mist)'}}><Trash2 size={13}/></button>
+          <button onClick={onEdit}   className="p-1.5 rounded-lg transition-all text-slate-400 hover:text-white hover:bg-slate-800"><Edit2 size={13}/></button>
+          <button onClick={onDelete} className="p-1.5 rounded-lg transition-all text-slate-400 hover:text-red-400 hover:bg-red-500/10"><Trash2 size={13}/></button>
         </div>
       </div>
 
       <div className="mb-3">
         <span className="inline-flex items-center px-2.5 py-1 rounded-xl text-[8px] font-black uppercase border"
           style={{background:statusMeta.bg,borderColor:statusMeta.border,color:statusMeta.color}}>
-          <span className="w-1.5 h-1.5 rounded-full mr-1.5" style={{background:statusMeta.color}}/>
           {statusMeta.label}
         </span>
         {truck.tipoFuel && (
           <span className="ml-2 px-2 py-0.5 rounded-lg text-[7px] font-bold uppercase"
-            style={{background:'#f0f9ff',color:'var(--fuel)',border:'1px solid #bae6fd'}}>
+            style={{background:'rgba(14,165,233,0.1)',color:'#38bdf8',border:'1px solid rgba(14,165,233,0.2)'}}>
             {truck.tipoFuel.toUpperCase()}
           </span>
         )}
       </div>
 
       <div className="mb-4">
-        <p className="text-[7px] font-bold uppercase tracking-widest mb-1" style={{color:'var(--oxford)'}}>Egresos del Período</p>
-        <p className="font-data text-3xl leading-none" style={{color:'var(--accent)'}}>{fmt(truck.total)}</p>
+        <p className="text-[7px] font-bold uppercase tracking-widest mb-1 text-slate-400">Egresos del Período</p>
+        <p className="font-data text-3xl leading-none text-white">{fmt(truck.total)}</p>
       </div>
 
-      <div className="space-y-2 pt-3 border-t" style={{borderColor:'var(--ice)'}}>
+      <div className="space-y-2 pt-3 border-t border-slate-800/60">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <Fuel size={11} style={{color:'var(--fuel)'}}/>
-            <span className="text-[8px] font-bold uppercase" style={{color:'var(--oxford)'}}>Combustible</span>
+            <Fuel size={11} className="text-blue-400"/>
+            <span className="text-[8px] font-bold uppercase text-slate-400">Combustible</span>
           </div>
-          <span className="font-mono text-[9px] font-bold" style={{color:'var(--fuel)'}}>{fmt(truck.fuelTotal)}</span>
+          <span className="font-mono text-[9px] font-bold text-white">{fmt(truck.fuelTotal)}</span>
         </div>
       </div>
 
-      <button onClick={() => setShowVar(!showVar)} className="w-full mt-3 pt-3 border-t flex items-center justify-between text-left" style={{borderColor:'var(--ice)'}}>
-        <span className="text-[8px] font-bold uppercase" style={{color:'var(--oxford)'}}>Mantenimiento</span>
+      <button onClick={() => setShowVar(!showVar)} className="w-full mt-3 pt-3 border-t border-slate-800/60 flex items-center justify-between text-left">
+        <span className="text-[8px] font-bold uppercase text-slate-400">Mantenimiento</span>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[9px] font-bold" style={{color:'#f97316'}}>{fmt(truck.maintTotal)}</span>
-          {showVar?<ChevronUp size={11} style={{color:'var(--oxford)'}}/>:<ChevronDown size={11} style={{color:'var(--oxford)'}}/>}
+          <span className="font-mono text-[9px] font-bold text-orange-400">{fmt(truck.maintTotal)}</span>
+          {showVar?<ChevronUp size={11} className="text-slate-500"/>:<ChevronDown size={11} className="text-slate-500"/>}
         </div>
       </button>
       {showVar && (
-        <div className="mt-2 rounded-xl p-3 space-y-1.5" style={{background:'#fff7ed',border:'1px solid #fed7aa'}}>
+        <div className="mt-2 rounded-xl p-3 space-y-1.5 bg-orange-500/10 border border-orange-500/20">
           {desgloseEntries.length===0
-            ? <p className="text-[8px] text-center" style={{color:'var(--oxford)'}}>Sin gastos variables</p>
+            ? <p className="text-[8px] text-center text-slate-500">Sin gastos variables</p>
             : desgloseEntries.map(([cat,monto]) => (
                 <div key={cat} className="flex items-center justify-between">
-                  <span className="text-[8px] font-bold uppercase truncate max-w-[130px]" style={{color:'var(--steel)'}}>{cat}</span>
-                  <span className="font-mono text-[9px] font-bold ml-2" style={{color:'#c2410c'}}>{fmt(monto)}</span>
+                  <span className="text-[8px] font-bold uppercase truncate max-w-[130px] text-orange-200">{cat}</span>
+                  <span className="font-mono text-[9px] font-bold ml-2 text-orange-400">{fmt(monto)}</span>
                 </div>
               ))
           }
@@ -1887,78 +1787,77 @@ function HistoryTable({allPeriod,trucks,truckFilter,onTruckFilter,onBaja,onEdit,
   const total = displayed.filter((h)=>h.status!=='baja').reduce((a,h)=>a+Number(h.amount),0);
 
   return (
-    <div className="card overflow-hidden">
-      <div className="p-4 border-b flex flex-wrap items-center justify-between gap-3" style={{borderColor:'var(--mist)',background:'var(--ice)'}}>
+    <div className="bg-[#131c2e] border border-slate-800/60 rounded-2xl overflow-hidden">
+      <div className="p-4 border-b border-slate-800 bg-[#0f172a] flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-display font-black uppercase text-sm" style={{color:'var(--navy)'}}>Movimientos</h2>
-          <p className="font-mono text-[10px] font-bold mt-0.5" style={{color:'var(--accent)'}}>
+          <h2 className="font-display font-black uppercase text-sm text-white">Movimientos</h2>
+          <p className="font-mono text-[10px] font-bold mt-0.5 text-blue-400">
             {displayed.filter((h)=>h.status!=='baja').length} registros · {fmt(total)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <select value={truckFilter} onChange={e=>onTruckFilter(e.target.value)} className="inp text-xs px-3 py-2 outline-none">
+          <select value={truckFilter} onChange={e=>onTruckFilter(e.target.value)} className="bg-[#0b0f19] border border-slate-800 text-white rounded-xl text-xs px-3 py-2 outline-none">
             <option value="">Todas las unidades</option>
             {trucks.map((t) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
           </select>
-          <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer whitespace-nowrap" style={{color:'var(--oxford)'}}>
-            <input type="checkbox" checked={showBaja} onChange={e=>setShowBaja(e.target.checked)} className="rounded" style={{accentColor:'var(--accent)'}} />
+          <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer whitespace-nowrap text-slate-400">
+            <input type="checkbox" checked={showBaja} onChange={e=>setShowBaja(e.target.checked)} className="rounded bg-[#0b0f19] border-slate-800 text-blue-500" />
             Ver bajas
           </label>
-          <button onClick={onExport} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-bold border transition-all"
-            style={{color:'var(--success)',borderColor:'#bbf7d0',background:'#f0fdf4'}}>
+          <button onClick={onExport} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-bold border transition-all bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20">
             ↓ Exportar XLS
           </button>
         </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[500px]">
-          <thead className="border-b" style={{background:'var(--ice)',borderColor:'var(--mist)'}}>
+          <thead className="bg-[#0f172a] border-b border-slate-800">
             <tr>
               {['Fecha','Unidad','Concepto','Monto','Acciones'].map((h,i) => (
-                <th key={h} className={`px-4 py-3 text-[8px] font-bold uppercase tracking-wider ${i===3?'text-right':i===4?'text-center':'text-left'}`} style={{color:'var(--oxford)'}}>{h}</th>
+                <th key={h} className={`px-4 py-3 text-[8px] font-bold uppercase tracking-wider text-slate-400 ${i===3?'text-right':i===4?'text-center':'text-left'}`}>{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y" style={{borderColor:'var(--ice)'}}>
+          <tbody className="divide-y divide-slate-800/50">
             {displayed.map((item) => {
               const esBaja  = item.status==='baja';
               const editado = item.ultimaEdicion;
               return (
-                <tr key={item.id} className={`history-row transition-colors ${esBaja?'opacity-50':''}`}>
-                  <td className="px-4 py-3 text-[9px] whitespace-nowrap font-medium" style={{color:'var(--oxford)'}}>{item.date}</td>
-                  <td className="px-4 py-3 font-display font-bold uppercase text-xs" style={{color:'var(--navy)'}}>{item.truck}</td>
+                <tr key={item.id} className={`transition-colors hover:bg-[#0b0f19] ${esBaja?'opacity-50':''}`}>
+                  <td className="px-4 py-3 text-[9px] whitespace-nowrap font-medium text-slate-400">{item.date}</td>
+                  <td className="px-4 py-3 font-display font-bold uppercase text-xs text-white">{item.truck}</td>
                   <td className="px-4 py-3">
                     {esBaja
-                      ? <div><span className="line-through text-[9px]" style={{color:'var(--oxford)'}}>{item.categoryLabel}</span><p className="text-[7px] font-bold mt-0.5" style={{color:'var(--danger)'}}>Baja: {item.bajaBy}</p></div>
+                      ? <div><span className="line-through text-[9px] text-slate-500">{item.categoryLabel}</span><p className="text-[7px] font-bold mt-0.5 text-red-500">Baja: {item.bajaBy}</p></div>
                       : <div>
                           <span className="px-2 py-0.5 rounded-lg text-[8px] font-bold uppercase border"
-                            style={isFuel(item.categoryLabel)?{background:'#f0f9ff',color:'var(--fuel)',borderColor:'#bae6fd'}:{background:'var(--ice)',color:'var(--steel)',borderColor:'var(--mist)'}}>
+                            style={isFuel(item.categoryLabel)?{background:'rgba(56,189,248,0.1)',color:'#38bdf8',borderColor:'rgba(56,189,248,0.2)'}:{background:'rgba(148,163,184,0.1)',color:'#94a3b8',borderColor:'rgba(148,163,184,0.2)'}}>
                             {item.categoryLabel}
                           </span>
                           {isFuel(item.categoryLabel)&&(item.litros||0)>0 && (
-                            <span className="ml-1.5 text-[7px] font-mono font-bold" style={{color:'var(--fuel)'}}>{item.litros}L</span>
+                            <span className="ml-1.5 text-[7px] font-mono font-bold text-blue-400">{item.litros}L</span>
                           )}
-                          {editado&&<p className="text-[7px] font-bold mt-0.5 flex items-center gap-1" style={{color:'var(--accent)'}}><Edit2 size={7}/> {editado.editadoPor}{editado.motivo&&<span style={{color:'var(--oxford)'}}> — {editado.motivo}</span>}</p>}
+                          {editado&&<p className="text-[7px] font-bold mt-0.5 flex items-center gap-1 text-blue-400"><Edit2 size={7}/> {editado.editadoPor}{editado.motivo&&<span className="text-slate-500"> — {editado.motivo}</span>}</p>}
                         </div>
                     }
                   </td>
-                  <td className={`px-4 py-3 text-right font-mono font-bold text-xs ${esBaja?'line-through':''}`} style={{color:esBaja?'var(--mist)':'var(--navy)'}}>
+                  <td className={`px-4 py-3 text-right font-mono font-bold text-xs ${esBaja?'line-through text-slate-600':'text-white'}`}>
                     {fmt(item.amount)}
-                    {editado&&!esBaja&&<p className="text-[7px] font-medium line-through" style={{color:'var(--mist)'}}>{fmt(editado.montoAnterior)}</p>}
+                    {editado&&!esBaja&&<p className="text-[7px] font-medium line-through text-slate-500">{fmt(editado.montoAnterior)}</p>}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
                       {!esBaja&&<>
-                        <button onClick={() => onEdit(item)} className="p-1.5 rounded-lg transition-all hover:bg-blue-50" style={{color:'var(--mist)'}}><Edit2 size={12}/></button>
-                        <button onClick={() => onBaja(item)} className="p-1.5 rounded-lg transition-all hover:bg-red-50"  style={{color:'var(--mist)'}}><Ban size={12}/></button>
+                        <button onClick={() => onEdit(item)} className="p-1.5 rounded-lg transition-all text-slate-500 hover:text-white hover:bg-slate-800"><Edit2 size={12}/></button>
+                        <button onClick={() => onBaja(item)} className="p-1.5 rounded-lg transition-all text-slate-500 hover:text-red-400 hover:bg-red-500/10"><Ban size={12}/></button>
                       </>}
-                      {esBaja&&<span className="text-[7px] font-bold uppercase" style={{color:'var(--danger)'}}>Baja</span>}
+                      {esBaja&&<span className="text-[7px] font-bold uppercase text-red-500">Baja</span>}
                     </div>
                   </td>
                 </tr>
               );
             })}
-            {displayed.length===0&&<tr><td colSpan={5} className="px-4 py-10 text-center text-sm" style={{color:'var(--oxford)'}}>Sin movimientos en el período</td></tr>}
+            {displayed.length===0&&<tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">Sin movimientos en el período</td></tr>}
           </tbody>
         </table>
       </div>
@@ -2136,19 +2035,19 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
   );
 
   return (
-    <div className="cb-section p-4 md:p-6 space-y-6 cb-anim" style={{borderRadius:0}}>
+    <div className="space-y-6 cb-anim pb-6">
 
       {/* ── Cabecera ── */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="cb-label mb-1">Módulo Comercial</p>
-          <h2 className="font-display font-black text-3xl uppercase tracking-tight" style={{color:'var(--cb-chrome)'}}>
-            Avance <span style={{color:'var(--cb-bronze)'}}>Vendedores</span>
+          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">Módulo Comercial</p>
+          <h2 className="font-display font-black text-3xl uppercase tracking-tight text-white">
+            Avance <span className="text-blue-500">Vendedores</span>
           </h2>
-          <p className="cb-label mt-1">{vendedoresData.length} vendedores activos · Datos en tiempo real</p>
+          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">{vendedoresData.length} vendedores activos · Datos en tiempo real</p>
         </div>
         <button onClick={onRefresh}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs uppercase transition-all bg-slate-800/50 border border-slate-700/50 text-sky-400 hover:bg-slate-800">
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs uppercase transition-all bg-[#131c2e] border border-slate-800/60 text-blue-400 hover:bg-slate-800">
           <RotateCcw size={13}/> Actualizar
         </button>
       </div>
@@ -2156,22 +2055,22 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
       {/* ── KPIs globales ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label:'Venta Total Flota', value:fmt(totalVenta),  sub:`${pctGlobalVenta.toFixed(1)}% del objetivo`, icon:DollarSign, accent:'var(--cb-bronze)' },
-          { label:'Clientes Activos',  value:totalClientes,    sub:'total de la red', icon:Users,   accent:'#38bdf8' },
-          { label:'Pedidos Período',   value:totalPedidos,     sub:'total registrados', icon:RotateCcw, accent:'#34d399' },
+          { label:'Venta Total Flota', value:fmt(totalVenta),  sub:`${pctGlobalVenta.toFixed(1)}% del objetivo`, icon:DollarSign, accent:'text-blue-400' },
+          { label:'Clientes Activos',  value:totalClientes,    sub:'total de la red', icon:Users,   accent:'text-sky-400' },
+          { label:'Pedidos Período',   value:totalPedidos,     sub:'total registrados', icon:RotateCcw, accent:'text-emerald-400' },
           { label:'Rechazo Global',    value:`${pctRechazoGlobal.toFixed(1)}%`, sub:'sobre venta total',
             icon: pctRechazoGlobal>10 ? AlertTriangle : ShieldCheck,
-            accent: pctRechazoGlobal>10 ? 'var(--cb-danger)' : 'var(--cb-ok)' },
+            accent: pctRechazoGlobal>10 ? 'text-red-400' : 'text-emerald-400' },
         ].map(kpi => (
-          <div key={kpi.label} className="cb-card p-5">
+          <div key={kpi.label} className="bg-[#131c2e] border border-slate-800/60 rounded-2xl p-5">
             <div className="flex items-center justify-between mb-3">
-              <div className="p-2 rounded-xl" style={{background:'rgba(255,255,255,.05)'}}>
-                <kpi.icon size={14} style={{color:kpi.accent}} />
+              <div className="p-2 rounded-xl bg-slate-800/50">
+                <kpi.icon size={14} className={kpi.accent} />
               </div>
             </div>
-            <p className="cb-label mb-1">{kpi.label}</p>
-            <p className="cb-value text-2xl leading-none">{kpi.value}</p>
-            <p className="cb-label mt-1" style={{color:'rgba(212,212,216,.4)'}}>{kpi.sub}</p>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">{kpi.label}</p>
+            <p className="font-mono text-2xl font-bold tracking-tight text-white leading-none">{kpi.value}</p>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mt-1">{kpi.sub}</p>
           </div>
         ))}
       </div>
@@ -2179,15 +2078,15 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
       {/* ── Tarjetas por vendedor ── */}
       <div>
         <div className="flex flex-wrap items-center justify-between mb-4 gap-3">
-          <p className="cb-label">Rendimiento Individual</p>
+          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Rendimiento Individual</p>
           <div className="relative w-full sm:max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={14} style={{color:'var(--cb-muted)'}} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
             <input
               type="text"
               placeholder="🔍 Buscar vendedor por nombre..."
               value={searchVendedor}
               onChange={e => setSearchVendedor(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl text-xs font-medium outline-none transition-all bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl text-xs font-medium outline-none transition-all bg-[#131c2e] border border-slate-800 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -2200,10 +2099,10 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
             const delay      = idx * 60;
 
             return (
-              <div key={v.id} className="cb-card p-5 space-y-4"
+              <div key={v.id} className="bg-[#131c2e] border rounded-2xl p-5 space-y-4 transition-all"
                 style={{animationDelay:`${delay}ms`,
-                  borderColor: superaObj ? 'var(--cb-bronze)' : 'rgba(51, 65, 85, 0.5)',
-                  boxShadow: superaObj ? '0 0 0 1px rgba(56,189,248,.3), 0 8px 32px rgba(56,189,248,.08)' : 'none'}}>
+                  borderColor: superaObj ? 'rgba(59,130,246,0.4)' : 'rgba(51, 65, 85, 0.6)',
+                  boxShadow: superaObj ? '0 0 0 1px rgba(59,130,246,0.2), 0 8px 32px rgba(59,130,246,0.1)' : 'none'}}>
 
                 {/* Encabezado vendedor */}
                 <div className="flex items-start justify-between">
@@ -2212,59 +2111,59 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
                       {v.nombre.split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase()}
                     </div>
                   <div className="min-w-0 flex-1">
-                    <p className="font-display font-black text-base uppercase leading-tight truncate" style={{color:'var(--cb-chrome)'}}>{v.nombre}</p>
-                    <p className="cb-label mt-0.5 text-[7px]">{v.zona}</p>
+                    <p className="font-display font-black text-base uppercase leading-tight truncate text-white">{v.nombre}</p>
+                    <p className="text-[7px] font-bold uppercase tracking-widest text-slate-500 mt-0.5">{v.zona}</p>
                     </div>
                   </div>
                   {superaObj
-                  ? <span className="cb-badge bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✓ OBJ</span>
-                  : <span className="cb-badge bg-blue-500/10 text-sky-400 border border-blue-500/20">EN CURSO</span>
+                  ? <span className="px-2 py-1 rounded-lg text-[8px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✓ OBJ</span>
+                  : <span className="px-2 py-1 rounded-lg text-[8px] font-bold uppercase bg-blue-500/10 text-sky-400 border border-blue-500/20">EN CURSO</span>
                   }
                 </div>
 
                 {/* KPI: Objetivo de Volumen con barra */}
                 <div>
                   <div className="flex justify-between items-end mb-1.5">
-                    <p className="cb-label">Objetivo de Volumen</p>
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Objetivo de Volumen</p>
                     <p className="font-mono font-bold text-xs text-sky-400">{pctVol.toFixed(1)}%</p>
                   </div>
-                  <div className="cb-progress-track">
-                    <div className={`cb-progress-fill ${superaObj?'ok':pctVol<50?'danger':''}`}
+                  <div className="h-1.5 rounded-full overflow-hidden bg-slate-800/50">
+                    <div className={`h-full rounded-full transition-all duration-700 ${superaObj?'bg-emerald-400':pctVol<50?'bg-red-400':'bg-gradient-to-r from-blue-500 to-cyan-400'}`}
                       style={{width:`${pctVol}%`}} />
                   </div>
                   <div className="flex justify-between mt-1">
-                    <span className="cb-label opacity-70">{fmt(v.ventaActual)}</span>
-                    <span className="cb-label opacity-70">/ {fmt(v.objetivoVolumen)}</span>
+                    <span className="text-[9px] font-bold text-slate-500">{fmt(v.ventaActual)}</span>
+                    <span className="text-[9px] font-bold text-slate-500">/ {fmt(v.objetivoVolumen)}</span>
                   </div>
                 </div>
 
                 {/* KPIs menores en grid */}
                 <div className="grid grid-cols-3 gap-2">
                   <div className="rounded-xl p-2.5 text-center bg-slate-800/50 border border-slate-700/50">
-                    <p className="cb-value text-lg leading-none">{v.clientesActivos}</p>
-                    <p className="cb-label mt-1">Clientes</p>
+                    <p className="font-mono font-bold text-white text-lg leading-none">{v.clientesActivos}</p>
+                    <p className="text-[8px] font-bold uppercase tracking-widest text-slate-500 mt-1">Clientes</p>
                   </div>
                   <div className="rounded-xl p-2.5 text-center bg-slate-800/50 border border-slate-700/50">
-                    <p className="cb-value text-lg leading-none">{v.pedidosTotales}</p>
-                    <p className="cb-label mt-1">Pedidos</p>
+                    <p className="font-mono font-bold text-white text-lg leading-none">{v.pedidosTotales}</p>
+                    <p className="text-[8px] font-bold uppercase tracking-widest text-slate-500 mt-1">Pedidos</p>
                   </div>
                   <div className={`rounded-xl p-2.5 text-center border ${alertaRech ? 'bg-red-500/10 border-red-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
-                    <p className={`cb-value text-lg leading-none ${alertaRech ? 'text-red-400' : 'text-emerald-400'}`}>{pctRechazo.toFixed(1)}%</p>
-                    <p className={`cb-label mt-1 ${alertaRech ? 'text-red-400/80' : 'text-emerald-400/80'}`}>Rechazo</p>
+                    <p className={`font-mono font-bold text-lg leading-none ${alertaRech ? 'text-red-400' : 'text-emerald-400'}`}>{pctRechazo.toFixed(1)}%</p>
+                    <p className={`text-[8px] font-bold uppercase tracking-widest mt-1 ${alertaRech ? 'text-red-400/80' : 'text-emerald-400/80'}`}>Rechazo</p>
                   </div>
                 </div>
 
                 {/* Barra de rechazo */}
                 <div>
-                  <p className="cb-label mb-1.5">Rechazo Acumulado ({fmt(v.rechazoAcumulado)})</p>
-                  <div className="cb-progress-track">
-                    <div className={`cb-progress-fill ${alertaRech?'danger':'ok'}`}
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Rechazo Acumulado ({fmt(v.rechazoAcumulado)})</p>
+                  <div className="h-1 rounded-full overflow-hidden bg-slate-800/50">
+                    <div className={`h-full rounded-full transition-all duration-700 ${alertaRech?'bg-red-400':'bg-emerald-400'}`}
                       style={{width:`${Math.min(pctRechazo*3,100)}%`}} />
                   </div>
                   <div className="flex items-center gap-1 mt-1">
                     {alertaRech
-                      ? <><AlertTriangle size={9} className="text-red-400"/><span className="cb-label text-red-400">Nivel de alerta — revisar</span></>
-                      : <><ShieldCheck size={9} className="text-emerald-400"/><span className="cb-label text-emerald-400/80">Dentro del rango aceptable</span></>
+                      ? <><AlertTriangle size={9} className="text-red-400"/><span className="text-[8px] font-bold uppercase tracking-widest text-red-400">Nivel de alerta — revisar</span></>
+                      : <><ShieldCheck size={9} className="text-emerald-400"/><span className="text-[8px] font-bold uppercase tracking-widest text-emerald-400/80">Dentro del rango aceptable</span></>
                     }
                   </div>
                 </div>
@@ -2277,19 +2176,19 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
 
       {/* ── Gráfico comparativo Recharts ── */}
       {filteredVendedores.length > 0 && (
-        <div className="cb-card p-6">
+        <div className="bg-[#131c2e] border border-slate-800/60 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <p className="cb-label mb-0.5">Comparativa de Desempeño</p>
-              <h3 className="font-display font-black text-xl uppercase" style={{color:'var(--cb-chrome)'}}>
+              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">Comparativa de Desempeño</p>
+              <h3 className="font-display font-black text-xl uppercase text-white">
                 Venta Actual vs Objetivo
               </h3>
             </div>
             <div className="flex gap-4">
-              {[{color:'var(--cb-bronze)',label:'Venta Actual'},{color:'rgba(212,212,216,.2)',label:'Objetivo'}].map(({color,label}) => (
+              {[{color:'#3b82f6',label:'Venta Actual'},{color:'rgba(30, 41, 59, 0.8)',label:'Objetivo'}].map(({color,label}) => (
                 <div key={label} className="flex items-center gap-1.5">
                   <div className="w-2.5 h-2.5 rounded-sm" style={{background:color}}/>
-                  <span className="cb-label">{label}</span>
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">{label}</span>
                 </div>
               ))}
             </div>
@@ -2298,33 +2197,33 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
           <div className="h-[320px] w-full mt-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={filteredVendedores} margin={{ top: 20, right: 10, left: 0, bottom: 80 }} barGap={2}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(212,212,216,.05)" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
                 <XAxis 
                   dataKey="nombre" 
                   axisLine={false} 
                   tickLine={false} 
                   interval={0}
-                  tick={{fontSize: 9, fill: 'var(--cb-muted)', fontFamily: 'Barlow Condensed', fontWeight: 800}}
+                  tick={{fontSize: 9, fill: '#64748b', fontFamily: 'Barlow Condensed', fontWeight: 800}}
                   angle={-45}
                   textAnchor="end"
                 />
                 <YAxis 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{fontSize: 9, fill: 'var(--cb-muted)'}}
+                  tick={{fontSize: 9, fill: '#64748b'}}
                   tickFormatter={(v) => `$${(v/1000000).toFixed(1)}M`}
                   width={55}
                 />
                 <Tooltip 
-                  cursor={{fill: 'rgba(255,255,255,0.03)'}}
-                  contentStyle={{background: 'var(--cb-panel)', border: '1px solid var(--cb-border)', borderRadius: '12px', color: 'var(--cb-chrome)', fontSize: '12px'}}
+                  cursor={{fill: '#1e293b'}}
+                  contentStyle={{background: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', color: '#fff', fontSize: '12px'}}
                   formatter={(value, name) => [fmt(value), name === 'ventaActual' ? 'Venta Actual' : 'Objetivo']}
-                  labelStyle={{color: 'var(--cb-muted)', fontWeight: 'bold', marginBottom: '4px'}}
+                  labelStyle={{color: '#94a3b8', fontWeight: 'bold', marginBottom: '4px'}}
                 />
-                <Bar dataKey="objetivoVolumen" fill="rgba(212,212,216,.12)" radius={[4,4,0,0]} name="Objetivo" />
-                <Bar dataKey="ventaActual" fill="var(--cb-bronze)" radius={[4,4,0,0]} name="Venta Actual">
+                <Bar dataKey="objetivoVolumen" fill="rgba(30, 41, 59, 0.8)" radius={[4,4,0,0]} name="Objetivo" />
+                <Bar dataKey="ventaActual" fill="#3b82f6" radius={[4,4,0,0]} name="Venta Actual">
                   {filteredVendedores.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.ventaActual >= entry.objetivoVolumen ? '#34d399' : '#38bdf8'} />
+                    <Cell key={`cell-${index}`} fill={entry.ventaActual >= entry.objetivoVolumen ? '#10b981' : '#3b82f6'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -2334,53 +2233,53 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
       )}
 
       {/* ── Tabla resumen ── */}
-      <div className="cb-card overflow-hidden">
-        <div className="p-4" style={{borderBottom:'1px solid var(--cb-border)'}}>
-          <p className="font-display font-black text-base uppercase" style={{color:'var(--cb-chrome)'}}>Resumen de la Red</p>
+      <div className="bg-[#131c2e] border border-slate-800/60 rounded-2xl overflow-hidden">
+        <div className="p-4 border-b border-slate-800 bg-[#0f172a]">
+          <p className="font-display font-black text-base uppercase text-white">Resumen de la Red</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[600px]">
-            <thead style={{background:'rgba(255,255,255,.03)'}}>
-              <tr style={{borderBottom:'1px solid var(--cb-border)'}}>
+            <thead className="bg-[#0f172a] border-b border-slate-800">
+              <tr>
                 {['Vendedor','Zona','Cumplimiento','Clientes','Pedidos','Rechazos ($)','Estado'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left" style={{color:'var(--cb-muted)',fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em'}}>{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-[8px] font-bold uppercase tracking-wider text-slate-400">{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-800/50">
             {[...filteredVendedores].sort((a,b) => (b.ventaActual/b.objetivoVolumen)-(a.ventaActual/a.objetivoVolumen)).map(v => {
                 const pct   = v.objetivoVolumen>0?((v.ventaActual/v.objetivoVolumen)*100):0;
                 const rech  = v.ventaActual>0?((v.rechazoAcumulado/v.ventaActual)*100):0;
                 const ok    = v.ventaActual>=v.objetivoVolumen;
                 const alert = rech>10;
                 return (
-                  <tr key={v.id} style={{borderBottom:'1px solid var(--cb-border)'}}>
+                  <tr key={v.id} className="transition-colors hover:bg-[#0b0f19]">
                     <td className="px-4 py-3">
-                      <p className="font-display font-bold text-xs uppercase" style={{color:'var(--cb-chrome)'}}>{v.nombre}</p>
+                      <p className="font-display font-bold text-xs uppercase text-white">{v.nombre}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="cb-label px-2 py-1 rounded-lg bg-blue-500/10 text-sky-400">{v.zona}</span>
+                      <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg bg-blue-500/10 text-sky-400">{v.zona}</span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <div className="w-[60px] h-1.5 bg-slate-700/50 rounded-full overflow-hidden">
                           <div style={{width:`${Math.min(pct,100)}%`}} className={`h-full rounded-full ${ok?'bg-emerald-400':'bg-gradient-to-r from-blue-500 to-cyan-400'}`}/>
                         </div>
-                        <span className={`cb-value text-[10px] ${ok?'text-emerald-400':'text-sky-400'}`}>{pct.toFixed(0)}%</span>
+                        <span className={`font-mono font-bold text-[10px] ${ok?'text-emerald-400':'text-sky-400'}`}>{pct.toFixed(0)}%</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 cb-value" style={{fontSize:11,color:'var(--cb-chrome)'}}>{v.clientesActivos}</td>
-                    <td className="px-4 py-3 cb-value" style={{fontSize:11,color:'var(--cb-chrome)'}}>{v.pedidosTotales}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-[11px] text-white">{v.clientesActivos}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-[11px] text-white">{v.pedidosTotales}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col">
-                        <span className={`cb-value text-[11px] ${alert?'text-red-400':'text-emerald-400'}`}>{fmt(v.rechazoAcumulado)}</span>
-                        <span className={`cb-label mt-0.5 ${alert?'text-red-400/80':'text-emerald-400/80'}`}>{rech.toFixed(1)}%</span>
+                        <span className={`font-mono font-bold text-[11px] ${alert?'text-red-400':'text-emerald-400'}`}>{fmt(v.rechazoAcumulado)}</span>
+                        <span className={`text-[8px] font-bold uppercase tracking-widest mt-0.5 ${alert?'text-red-400/80':'text-emerald-400/80'}`}>{rech.toFixed(1)}%</span>
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       {ok
-                        ? <span className="cb-badge bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Objetivo alcanzado</span>
-                        : <span className="cb-badge bg-blue-500/10 text-sky-400 border border-blue-500/20">En progreso</span>
+                        ? <span className="px-2 py-1 rounded-lg text-[8px] font-bold uppercase tracking-widest bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Objetivo alcanzado</span>
+                        : <span className="px-2 py-1 rounded-lg text-[8px] font-bold uppercase tracking-widest bg-blue-500/10 text-sky-400 border border-blue-500/20">En progreso</span>
                       }
                     </td>
                   </tr>
