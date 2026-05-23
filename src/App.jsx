@@ -123,28 +123,28 @@ const globalStyles = `
     --success:     #16a34a;
     --fuel:        #0ea5e9;
 
-    /* ── Chrome Brown (módulo comercial) ── */
-    --cb-bg:      #120c08;
-    --cb-panel:   #1e1610;
-    --cb-chrome:  #d4d4d8;
-    --cb-bronze:  #c29d6d;
-    --cb-border:  #2e2218;
-    --cb-muted:   #6b5744;
-    --cb-danger:  #c0392b;
-    --cb-ok:      #27ae60;
+    /* ── Blue Tech (módulo comercial) ── */
+    --cb-bg:      #0f172a;
+    --cb-panel:   #1e293b;
+    --cb-chrome:  #f8fafc;
+    --cb-bronze:  #38bdf8;
+    --cb-border:  #334155;
+    --cb-muted:   #94a3b8;
+    --cb-danger:  #f87171;
+    --cb-ok:      #34d399;
   }
 
-  /* Chrome Brown section */
+  /* Blue Tech section */
   .cb-section { background: var(--cb-bg); min-height: 100vh; }
   .cb-card {
     background: var(--cb-panel);
-    border: 1px solid var(--cb-border);
+    border: 1px solid rgba(51, 65, 85, 0.5);
     border-radius: 18px;
     transition: all .25s ease;
   }
   .cb-card:hover {
     border-color: var(--cb-bronze);
-    box-shadow: 0 8px 32px rgba(194,157,109,.12);
+    box-shadow: 0 8px 32px rgba(56,189,248,.12);
     transform: translateY(-2px);
   }
   .cb-label { color: var(--cb-muted); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
@@ -160,14 +160,14 @@ const globalStyles = `
   }
   .cb-progress-fill {
     height: 100%; border-radius: 99px;
-    background: linear-gradient(90deg, #c29d6d, #e8c98a);
+    background: linear-gradient(90deg, #3b82f6, #22d3ee);
     transition: width .7s cubic-bezier(.34,1.2,.64,1);
   }
   .cb-progress-fill.danger {
-    background: linear-gradient(90deg, #c0392b, #e74c3c);
+    background: linear-gradient(90deg, #ef4444, #f87171);
   }
   .cb-progress-fill.ok {
-    background: linear-gradient(90deg, #27ae60, #2ecc71);
+    background: linear-gradient(90deg, #10b981, #34d399);
   }
   .cb-bar-col {
     display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -175,7 +175,7 @@ const globalStyles = `
   }
   .cb-bar-inner {
     width: 100%; border-radius: 6px 6px 0 0;
-    background: linear-gradient(180deg, #c29d6d, #8b6940);
+    background: linear-gradient(180deg, #38bdf8, #0284c7);
     transition: height .6s cubic-bezier(.34,1.2,.64,1);
     min-height: 4px;
   }
@@ -278,7 +278,6 @@ const globalStyles = `
   .truck-card:hover { transform:translateY(-3px); border-color:rgba(37,99,235,.22); box-shadow: 0 14px 36px rgba(37,99,235,.11); }
 
   .fab {
-    background: linear-gradient(135deg, #1d4ed8, #2563eb);
     box-shadow: 0 8px 28px rgba(37,99,235,.48);
     transition: all .28s cubic-bezier(.34,1.56,.64,1);
     animation: pulseDot 2.2s ease-in-out infinite;
@@ -779,7 +778,7 @@ export default function App() {
 
         {/* FAB */}
         <button onClick={() => setModals(m => ({...m,expense:true}))}
-          className="fab fixed bottom-6 right-6 z-40 w-14 h-14 text-white rounded-full flex items-center justify-center">
+          className="fab fixed bottom-6 right-6 z-40 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center transition-colors">
           <Plus size={22} />
         </button>
 
@@ -2149,8 +2148,7 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
           <p className="cb-label mt-1">{vendedoresData.length} vendedores activos · Datos en tiempo real</p>
         </div>
         <button onClick={onRefresh}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs uppercase transition-all"
-          style={{background:'var(--cb-panel)',border:'1px solid var(--cb-border)',color:'var(--cb-bronze)'}}>
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs uppercase transition-all bg-slate-800/50 border border-slate-700/50 text-sky-400 hover:bg-slate-800">
           <RotateCcw size={13}/> Actualizar
         </button>
       </div>
@@ -2159,8 +2157,8 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { label:'Venta Total Flota', value:fmt(totalVenta),  sub:`${pctGlobalVenta.toFixed(1)}% del objetivo`, icon:DollarSign, accent:'var(--cb-bronze)' },
-          { label:'Clientes Activos',  value:totalClientes,    sub:'total de la red', icon:Users,   accent:'#7dd3fc' },
-          { label:'Pedidos Período',   value:totalPedidos,     sub:'total registrados', icon:RotateCcw, accent:'#86efac' },
+          { label:'Clientes Activos',  value:totalClientes,    sub:'total de la red', icon:Users,   accent:'#38bdf8' },
+          { label:'Pedidos Período',   value:totalPedidos,     sub:'total registrados', icon:RotateCcw, accent:'#34d399' },
           { label:'Rechazo Global',    value:`${pctRechazoGlobal.toFixed(1)}%`, sub:'sobre venta total',
             icon: pctRechazoGlobal>10 ? AlertTriangle : ShieldCheck,
             accent: pctRechazoGlobal>10 ? 'var(--cb-danger)' : 'var(--cb-ok)' },
@@ -2189,8 +2187,7 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
               placeholder="🔍 Buscar vendedor por nombre..."
               value={searchVendedor}
               onChange={e => setSearchVendedor(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl text-xs font-medium outline-none transition-all"
-              style={{background:'rgba(255,255,255,.05)',border:'1px solid var(--cb-border)',color:'var(--cb-chrome)'}}
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl text-xs font-medium outline-none transition-all bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -2205,24 +2202,23 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
             return (
               <div key={v.id} className="cb-card p-5 space-y-4"
                 style={{animationDelay:`${delay}ms`,
-                  borderColor: superaObj ? 'var(--cb-bronze)' : 'var(--cb-border)',
-                  boxShadow: superaObj ? '0 0 0 1px rgba(194,157,109,.3), 0 8px 32px rgba(194,157,109,.08)' : 'none'}}>
+                  borderColor: superaObj ? 'var(--cb-bronze)' : 'rgba(51, 65, 85, 0.5)',
+                  boxShadow: superaObj ? '0 0 0 1px rgba(56,189,248,.3), 0 8px 32px rgba(56,189,248,.08)' : 'none'}}>
 
                 {/* Encabezado vendedor */}
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center font-display font-black text-sm shrink-0"
-                      style={{background:'rgba(194,157,109,.15)', color:'var(--cb-bronze)', border:'1px solid rgba(194,157,109,.25)'}}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center font-display font-black text-sm shrink-0 bg-blue-500/10 text-sky-400 border border-blue-500/20">
                       {v.nombre.split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase()}
                     </div>
                   <div className="min-w-0 flex-1">
                     <p className="font-display font-black text-base uppercase leading-tight truncate" style={{color:'var(--cb-chrome)'}}>{v.nombre}</p>
-                    <p className="cb-label mt-0.5" style={{color:'rgba(212,212,216,.4)', fontSize:'7px'}}>{v.zona}</p>
+                    <p className="cb-label mt-0.5 text-[7px]">{v.zona}</p>
                     </div>
                   </div>
                   {superaObj
-                    ? <span className="cb-badge" style={{background:'rgba(39,174,96,.2)',color:'#2ecc71',border:'1px solid rgba(39,174,96,.3)'}}>✓ OBJ</span>
-                    : <span className="cb-badge" style={{background:'rgba(194,157,109,.15)',color:'var(--cb-bronze)',border:'1px solid rgba(194,157,109,.25)'}}>EN CURSO</span>
+                  ? <span className="cb-badge bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✓ OBJ</span>
+                  : <span className="cb-badge bg-blue-500/10 text-sky-400 border border-blue-500/20">EN CURSO</span>
                   }
                 </div>
 
@@ -2230,34 +2226,31 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
                 <div>
                   <div className="flex justify-between items-end mb-1.5">
                     <p className="cb-label">Objetivo de Volumen</p>
-                    <p className="cb-value text-xs">{pctVol.toFixed(1)}%</p>
+                    <p className="font-mono font-bold text-xs text-sky-400">{pctVol.toFixed(1)}%</p>
                   </div>
                   <div className="cb-progress-track">
                     <div className={`cb-progress-fill ${superaObj?'ok':pctVol<50?'danger':''}`}
                       style={{width:`${pctVol}%`}} />
                   </div>
                   <div className="flex justify-between mt-1">
-                    <span className="cb-label" style={{color:'rgba(212,212,216,.4)'}}>{fmt(v.ventaActual)}</span>
-                    <span className="cb-label" style={{color:'rgba(212,212,216,.4)'}}>/ {fmt(v.objetivoVolumen)}</span>
+                    <span className="cb-label opacity-70">{fmt(v.ventaActual)}</span>
+                    <span className="cb-label opacity-70">/ {fmt(v.objetivoVolumen)}</span>
                   </div>
                 </div>
 
                 {/* KPIs menores en grid */}
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-xl p-2.5 text-center" style={{background:'rgba(255,255,255,.04)',border:'1px solid var(--cb-border)'}}>
+                  <div className="rounded-xl p-2.5 text-center bg-slate-800/50 border border-slate-700/50">
                     <p className="cb-value text-lg leading-none">{v.clientesActivos}</p>
                     <p className="cb-label mt-1">Clientes</p>
                   </div>
-                  <div className="rounded-xl p-2.5 text-center" style={{background:'rgba(255,255,255,.04)',border:'1px solid var(--cb-border)'}}>
+                  <div className="rounded-xl p-2.5 text-center bg-slate-800/50 border border-slate-700/50">
                     <p className="cb-value text-lg leading-none">{v.pedidosTotales}</p>
                     <p className="cb-label mt-1">Pedidos</p>
                   </div>
-                  <div className="rounded-xl p-2.5 text-center"
-                    style={{background: alertaRech?'rgba(192,57,43,.15)':'rgba(39,174,96,.08)',
-                      border:`1px solid ${alertaRech?'rgba(192,57,43,.35)':'rgba(39,174,96,.2)'}`}}>
-                    <p className="cb-value text-lg leading-none"
-                      style={{color: alertaRech?'#e74c3c':'#2ecc71'}}>{pctRechazo.toFixed(1)}%</p>
-                    <p className="cb-label mt-1" style={{color: alertaRech?'rgba(231,76,60,.7)':'rgba(46,204,113,.7)'}}>Rechazo</p>
+                  <div className={`rounded-xl p-2.5 text-center border ${alertaRech ? 'bg-red-500/10 border-red-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
+                    <p className={`cb-value text-lg leading-none ${alertaRech ? 'text-red-400' : 'text-emerald-400'}`}>{pctRechazo.toFixed(1)}%</p>
+                    <p className={`cb-label mt-1 ${alertaRech ? 'text-red-400/80' : 'text-emerald-400/80'}`}>Rechazo</p>
                   </div>
                 </div>
 
@@ -2270,8 +2263,8 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
                   </div>
                   <div className="flex items-center gap-1 mt-1">
                     {alertaRech
-                      ? <><AlertTriangle size={9} style={{color:'#e74c3c'}}/><span className="cb-label" style={{color:'#e74c3c'}}>Nivel de alerta — revisar</span></>
-                      : <><ShieldCheck size={9} style={{color:'#2ecc71'}}/><span className="cb-label" style={{color:'rgba(46,204,113,.7)'}}>Dentro del rango aceptable</span></>
+                      ? <><AlertTriangle size={9} className="text-red-400"/><span className="cb-label text-red-400">Nivel de alerta — revisar</span></>
+                      : <><ShieldCheck size={9} className="text-emerald-400"/><span className="cb-label text-emerald-400/80">Dentro del rango aceptable</span></>
                     }
                   </div>
                 </div>
@@ -2331,7 +2324,7 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
                 <Bar dataKey="objetivoVolumen" fill="rgba(212,212,216,.12)" radius={[4,4,0,0]} name="Objetivo" />
                 <Bar dataKey="ventaActual" fill="var(--cb-bronze)" radius={[4,4,0,0]} name="Venta Actual">
                   {filteredVendedores.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.ventaActual >= entry.objetivoVolumen ? '#27ae60' : '#c29d6d'} />
+                    <Cell key={`cell-${index}`} fill={entry.ventaActual >= entry.objetivoVolumen ? '#34d399' : '#38bdf8'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -2366,28 +2359,28 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
                       <p className="font-display font-bold text-xs uppercase" style={{color:'var(--cb-chrome)'}}>{v.nombre}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="cb-label px-2 py-1 rounded-lg" style={{background:'rgba(194,157,109,.1)',color:'var(--cb-bronze)'}}>{v.zona}</span>
+                      <span className="cb-label px-2 py-1 rounded-lg bg-blue-500/10 text-sky-400">{v.zona}</span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <div style={{width:60,height:6,background:'rgba(255,255,255,.07)',borderRadius:99,overflow:'hidden'}}>
-                          <div style={{width:`${Math.min(pct,100)}%`,height:'100%',background:ok?'#2ecc71':'#c29d6d',borderRadius:99}}/>
+                        <div className="w-[60px] h-1.5 bg-slate-700/50 rounded-full overflow-hidden">
+                          <div style={{width:`${Math.min(pct,100)}%`}} className={`h-full rounded-full ${ok?'bg-emerald-400':'bg-gradient-to-r from-blue-500 to-cyan-400'}`}/>
                         </div>
-                        <span className="cb-value" style={{fontSize:10,color:ok?'#2ecc71':'var(--cb-chrome)'}}>{pct.toFixed(0)}%</span>
+                        <span className={`cb-value text-[10px] ${ok?'text-emerald-400':'text-sky-400'}`}>{pct.toFixed(0)}%</span>
                       </div>
                     </td>
                     <td className="px-4 py-3 cb-value" style={{fontSize:11,color:'var(--cb-chrome)'}}>{v.clientesActivos}</td>
                     <td className="px-4 py-3 cb-value" style={{fontSize:11,color:'var(--cb-chrome)'}}>{v.pedidosTotales}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col">
-                        <span className="cb-value" style={{fontSize:11,color:alert?'#e74c3c':'#2ecc71'}}>{fmt(v.rechazoAcumulado)}</span>
-                        <span className="cb-label mt-0.5" style={{color:alert?'rgba(231,76,60,.7)':'rgba(46,204,113,.7)'}}>{rech.toFixed(1)}%</span>
+                        <span className={`cb-value text-[11px] ${alert?'text-red-400':'text-emerald-400'}`}>{fmt(v.rechazoAcumulado)}</span>
+                        <span className={`cb-label mt-0.5 ${alert?'text-red-400/80':'text-emerald-400/80'}`}>{rech.toFixed(1)}%</span>
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       {ok
-                        ? <span className="cb-badge" style={{background:'rgba(39,174,96,.15)',color:'#2ecc71',border:'1px solid rgba(39,174,96,.3)'}}>Objetivo alcanzado</span>
-                        : <span className="cb-badge" style={{background:'rgba(194,157,109,.12)',color:'var(--cb-bronze)',border:'1px solid rgba(194,157,109,.25)'}}>En progreso</span>
+                        ? <span className="cb-badge bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Objetivo alcanzado</span>
+                        : <span className="cb-badge bg-blue-500/10 text-sky-400 border border-blue-500/20">En progreso</span>
                       }
                     </td>
                   </tr>
