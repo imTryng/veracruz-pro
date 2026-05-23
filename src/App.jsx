@@ -249,6 +249,7 @@ const globalStyles = `
     font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
     text-transform: uppercase; letter-spacing:.06em; font-size: 11px;
     transition: all .2s ease; color: var(--oxford);
+    white-space: nowrap;
   }
   .tab-pill.active { background: var(--navy); color: white; box-shadow: 0 3px 12px rgba(11,17,32,.25); }
   .tab-pill:hover:not(.active) { color: var(--navy); background: var(--ice); }
@@ -306,6 +307,9 @@ const globalStyles = `
   ::-webkit-scrollbar { width:5px; height:5px; }
   ::-webkit-scrollbar-track { background:transparent; }
   ::-webkit-scrollbar-thumb { background:var(--mist); border-radius:10px; }
+
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 `;
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
@@ -647,7 +651,7 @@ export default function App() {
     {id:'units',     label:'Flota'},
     {id:'history',   label:'Gastos'},
     {id:'fuel',      label:'Combustible'},
-    {id:'vendedores',label:'Avance Vendedores'},
+    {id:'vendedores',label:'Vendedores'},
   ];
 
   return (
@@ -672,7 +676,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex bg-slate-100 p-1 rounded-2xl order-last md:order-none w-full md:w-auto justify-center gap-0.5">
+          <div className="flex bg-slate-100 p-1 rounded-2xl order-last md:order-none w-full md:w-auto justify-start md:justify-center gap-0.5 overflow-x-auto hide-scrollbar">
             {TABS.map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                 className={`tab-pill px-4 py-2 rounded-xl flex-1 md:flex-none ${activeTab===tab.id?'active':''}`}>
