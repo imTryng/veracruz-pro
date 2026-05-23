@@ -392,22 +392,16 @@ export default function App() {
 
         const parsed = dataRows.map(row => {
           const columns = row.split(separator).map(c => c.replace(/^"|"$/g, '').trim());
-          if (columns.length < 5) return null;
-
-          // MAPEO ESTRICTO POR COLUMNA DE TU EXCEL
-          const objVol = cleanNum(columns[2]); // Columna C: Objetivo
-          const ventAct = cleanNum(columns[3]); // Columna D: Avance
-          const subRechazo = cleanNum(columns[4]); // Columna E: Rechazo
-          const pedTotales = cleanNum(columns[5]); // Columna F: Pedidos Acumulados
+          if (columns.length < 6) return null;
 
           return {
             id: Math.random().toString(36).substr(2, 9),
-            nombre: columns[0] || 'Desconocido', // Columna A: Nombre Vendedor
-            clientesActivos: cleanNum(columns[1]), // Columna B: Clientes Activos
-            objetivoVolumen: objVol,
-            ventaActual: ventAct,
-            pedidosTotales: pedTotales,
-            pedidosRechazados: subRechazo > 0 ? 1 : 0, // Control interno para evitar alertas erróneas
+            nombre: columns[0] || 'Desconocido',
+            clientesActivos: cleanNum(columns[1]),
+            objetivoVolumen: cleanNum(columns[2]),
+            ventaActual: cleanNum(columns[3]),
+            rechazoAcumulado: cleanNum(columns[4]),
+            pedidosTotales: cleanNum(columns[5]),
             zona: 'Distribución'
           };
         }).filter(Boolean);
@@ -2123,9 +2117,10 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
   const totalObjetivo  = vendedoresData.reduce((a,v) => a + v.objetivoVolumen, 0);
   const totalClientes  = vendedoresData.reduce((a,v) => a + v.clientesActivos, 0);
   const totalPedidos   = vendedoresData.reduce((a,v) => a + v.pedidosTotales, 0);
-  const totalRechazos  = vendedoresData.reduce((a,v) => a + v.pedidosRechazados, 0);
+  const totalRechazoAcumulado = vendedoresData.reduce((a,v) => a + v.rechazoAcumulado, 0);
+  
   const pctGlobalVenta = totalObjetivo > 0 ? (totalVenta / totalObjetivo) * 100 : 0;
-  const pctRechazoGlobal = totalPedidos > 0 ? (totalRechazos / totalPedidos) * 100 : 0;
+  const pctRechazoGlobal = totalVenta > 0 ? (totalRechazoAcumulado / totalVenta) * 100 : 0;
 
   // Para el gráfico de barras comparativo
   const maxVenta = Math.max(...vendedoresData.map(v => v.ventaActual), 1);
@@ -2163,8 +2158,8 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
         {[
           { label:'Venta Total Flota', value:fmt(totalVenta),  sub:`${pctGlobalVenta.toFixed(1)}% del objetivo`, icon:DollarSign, accent:'var(--cb-bronze)' },
           { label:'Clientes Activos',  value:totalClientes,    sub:'total de la red', icon:Users,   accent:'#7dd3fc' },
-          { label:'Pedidos Período',   value:totalPedidos,     sub:`${totalRechazos} rechazados`, icon:RotateCcw, accent:'#86efac' },
-          { label:'Rechazo Global',    value:`${pctRechazoGlobal.toFixed(1)}%`, sub:'pedidos rechazados / total',
+          { label:'Pedidos Período',   value:totalPedidos,     sub:'total registrados', icon:RotateCcw, accent:'#86efac' },
+          { label:'Rechazo Global',    value:`${pctRechazoGlobal.toFixed(1)}%`, sub:'sobre venta total',
             icon: pctRechazoGlobal>10 ? AlertTriangle : ShieldCheck,
             accent: pctRechazoGlobal>10 ? 'var(--cb-danger)' : 'var(--cb-ok)' },
         ].map(kpi => (
@@ -2187,7 +2182,7 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {vendedoresData.map((v, idx) => {
             const pctVol    = v.objetivoVolumen > 0 ? Math.min((v.ventaActual / v.objetivoVolumen) * 100, 100) : 0;
-            const pctRechazo= v.pedidosTotales  > 0 ? (v.pedidosRechazados / v.pedidosTotales) * 100 : 0;
+            const pctRechazo= v.ventaActual > 0 ? (v.rechazoAcumulado / v.ventaActual) * 100 : 0;
             const superaObj  = v.ventaActual >= v.objetivoVolumen;
             const alertaRech = pctRechazo > 10;
             const delay      = idx * 60;
@@ -2253,7 +2248,7 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
 
                 {/* Barra de rechazo */}
                 <div>
-                  <p className="cb-label mb-1.5">Rechazo Acumulado ({v.pedidosRechazados}/{v.pedidosTotales} pedidos)</p>
+                  <p className="cb-label mb-1.5">Rechazo Acumulado ({fmt(v.rechazoAcumulado)})</p>
                   <div className="cb-progress-track">
                     <div className={`cb-progress-fill ${alertaRech?'danger':'ok'}`}
                       style={{width:`${Math.min(pctRechazo*3,100)}%`}} />
@@ -2348,7 +2343,7 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
           <table className="w-full min-w-[600px]">
             <thead style={{background:'rgba(255,255,255,.03)'}}>
               <tr style={{borderBottom:'1px solid var(--cb-border)'}}>
-                {['Vendedor','Zona','Cumplimiento','Clientes','Pedidos','Rechazos','Estado'].map(h => (
+                {['Vendedor','Zona','Cumplimiento','Clientes','Pedidos','Rechazos ($)','Estado'].map(h => (
                   <th key={h} className="px-4 py-3 text-left" style={{color:'var(--cb-muted)',fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em'}}>{h}</th>
                 ))}
               </tr>
@@ -2356,7 +2351,7 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
             <tbody>
               {[...vendedoresData].sort((a,b) => (b.ventaActual/b.objetivoVolumen)-(a.ventaActual/a.objetivoVolumen)).map(v => {
                 const pct   = v.objetivoVolumen>0?((v.ventaActual/v.objetivoVolumen)*100):0;
-                const rech  = v.pedidosTotales>0?((v.pedidosRechazados/v.pedidosTotales)*100):0;
+                const rech  = v.ventaActual>0?((v.rechazoAcumulado/v.ventaActual)*100):0;
                 const ok    = v.ventaActual>=v.objetivoVolumen;
                 const alert = rech>10;
                 return (
@@ -2378,7 +2373,10 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
                     <td className="px-4 py-3 cb-value" style={{fontSize:11,color:'var(--cb-chrome)'}}>{v.clientesActivos}</td>
                     <td className="px-4 py-3 cb-value" style={{fontSize:11,color:'var(--cb-chrome)'}}>{v.pedidosTotales}</td>
                     <td className="px-4 py-3">
-                      <span className="cb-value" style={{fontSize:11,color:alert?'#e74c3c':'#2ecc71'}}>{rech.toFixed(1)}%</span>
+                      <div className="flex flex-col">
+                        <span className="cb-value" style={{fontSize:11,color:alert?'#e74c3c':'#2ecc71'}}>{fmt(v.rechazoAcumulado)}</span>
+                        <span className="cb-label mt-0.5" style={{color:alert?'rgba(231,76,60,.7)':'rgba(46,204,113,.7)'}}>{rech.toFixed(1)}%</span>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       {ok
