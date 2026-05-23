@@ -363,19 +363,42 @@ export default function App() {
         const res  = await fetch(GOOGLE_SHEET_CSV_URL);
         const text = await res.text();
         const rows = text.trim().split('\n').slice(1); // omitir encabezado
+        
+        // Lector inteligente de CSV que ignora comas dentro de comillas
+        const parseCSVRow = (str) => {
+          const res = [];
+          let curr = '', inQ = false;
+          for (let i = 0; i < str.length; i++) {
+            if (str[i] === '"') inQ = !inQ;
+            else if (str[i] === ',' && !inQ) { res.push(curr.trim()); curr = ''; }
+            else curr += str[i];
+          }
+          res.push(curr.trim());
+          return res;
+        };
+
+        // Lector de números que limpia signos $, % y soluciona formatos (1.000,50 o 1,000.50)
+        const parseCSVNum = (val) => {
+          if (!val) return 0;
+          let s = String(val).trim().replace(/[$%A-Za-z\s]/g, '');
+          if (/^-?\d{1,3}(?:\.\d{3})*(?:,\d+)?$/.test(s) || /^-?\d+,\d+$/.test(s)) {
+            s = s.replace(/\./g, '').replace(',', '.');
+          } else {
+            s = s.replace(/,/g, '');
+          }
+          return Number(s) || 0;
+        };
+
         const parsed = rows.map(row => {
-          const [id,nombre,zona,objetivoVolumen,ventaActual,clientesActivos,pedidosTotales,pedidosRechazados] = row.split(',');
+          const cols = parseCSVRow(row);
           return {
-            id: id?.trim(),
-            nombre: nombre?.trim(),
-            zona: zona?.trim(),
-            objetivoVolumen: Number(objetivoVolumen)||0,
-            ventaActual: Number(ventaActual)||0,
-            clientesActivos: Number(clientesActivos)||0,
-            pedidosTotales: Number(pedidosTotales)||0,
-            pedidosRechazados: Number(pedidosRechazados)||0,
+            id: cols[0], nombre: cols[1], zona: cols[2],
+            objetivoVolumen: parseCSVNum(cols[3]), ventaActual: parseCSVNum(cols[4]),
+            clientesActivos: parseCSVNum(cols[5]), pedidosTotales: parseCSVNum(cols[6]),
+            pedidosRechazados: parseCSVNum(cols[7]),
           };
-        });
+        }).filter(v => v.nombre); // Evitar filas vacías
+
         setVendedoresData(parsed);
       } else {
         // ── Datos MOCK (se usan mientras no haya URL real) ──────────────────────
