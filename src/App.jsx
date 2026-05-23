@@ -2111,6 +2111,7 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}) {
 // ─── AVANCE VENDEDORES PANEL ──────────────────────────────────────────────────
 
 function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
+  const [searchVendedor, setSearchVendedor] = useState('');
 
   // KPIs globales
   const totalVenta     = vendedoresData.reduce((a,v) => a + v.ventaActual, 0);
@@ -2122,8 +2123,9 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
   const pctGlobalVenta = totalObjetivo > 0 ? (totalVenta / totalObjetivo) * 100 : 0;
   const pctRechazoGlobal = totalVenta > 0 ? (totalRechazoAcumulado / totalVenta) * 100 : 0;
 
-  // Para el gráfico de barras comparativo
-  const maxVenta = Math.max(...vendedoresData.map(v => v.ventaActual), 1);
+  const filteredVendedores = vendedoresData.filter(v =>
+    v.nombre.toLowerCase().includes(searchVendedor.toLowerCase())
+  );
 
   if (loading) return (
     <div className="cb-section flex items-center justify-center" style={{minHeight:'60vh'}}>
@@ -2178,9 +2180,22 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
 
       {/* ── Tarjetas por vendedor ── */}
       <div>
-        <p className="cb-label mb-3">Rendimiento Individual</p>
+        <div className="flex flex-wrap items-center justify-between mb-4 gap-3">
+          <p className="cb-label">Rendimiento Individual</p>
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={14} style={{color:'var(--cb-muted)'}} />
+            <input
+              type="text"
+              placeholder="🔍 Buscar vendedor por nombre..."
+              value={searchVendedor}
+              onChange={e => setSearchVendedor(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl text-xs font-medium outline-none transition-all"
+              style={{background:'rgba(255,255,255,.05)',border:'1px solid var(--cb-border)',color:'var(--cb-chrome)'}}
+            />
+          </div>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {vendedoresData.map((v, idx) => {
+          {filteredVendedores.map((v, idx) => {
             const pctVol    = v.objetivoVolumen > 0 ? Math.min((v.ventaActual / v.objetivoVolumen) * 100, 100) : 0;
             const pctRechazo= v.ventaActual > 0 ? (v.rechazoAcumulado / v.ventaActual) * 100 : 0;
             const superaObj  = v.ventaActual >= v.objetivoVolumen;
@@ -2200,9 +2215,9 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
                       style={{background:'rgba(194,157,109,.15)', color:'var(--cb-bronze)', border:'1px solid rgba(194,157,109,.25)'}}>
                       {v.nombre.split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase()}
                     </div>
-                    <div>
-                      <p className="font-display font-black text-base uppercase leading-tight" style={{color:'var(--cb-chrome)'}}>{v.nombre}</p>
-                      <p className="cb-label" style={{color:'var(--cb-bronze)'}}>{v.zona}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-display font-black text-base uppercase leading-tight truncate" style={{color:'var(--cb-chrome)'}}>{v.nombre}</p>
+                    <p className="cb-label mt-0.5" style={{color:'rgba(212,212,216,.4)', fontSize:'7px'}}>{v.zona}</p>
                     </div>
                   </div>
                   {superaObj
@@ -2267,8 +2282,8 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
         </div>
       </div>
 
-      {/* ── Gráfico comparativo CSS ── */}
-      {vendedoresData.length > 0 && (
+      {/* ── Gráfico comparativo Recharts ── */}
+      {filteredVendedores.length > 0 && (
         <div className="cb-card p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -2287,49 +2302,40 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
             </div>
           </div>
 
-          {/* Barras CSS nativas */}
-          <div className="flex items-end gap-3" style={{height:180}}>
-            {vendedoresData.map(v => {
-              const hVenta = Math.round((v.ventaActual / maxVenta) * 160);
-              const hObj   = Math.round((v.objetivoVolumen / maxVenta) * 160);
-              return (
-                <div key={v.id} className="cb-bar-col">
-                  <div className="flex items-end gap-1 w-full justify-center" style={{height:160}}>
-                    {/* Objetivo (fondo) */}
-                    <div style={{
-                      width:'36%', height:`${hObj}px`,
-                      background:'rgba(212,212,216,.12)',
-                      borderRadius:'6px 6px 0 0',
-                      border:'1px solid rgba(212,212,216,.08)',
-                    }}/>
-                    {/* Venta actual */}
-                    <div style={{
-                      width:'36%', height:`${hVenta}px`,
-                      background: v.ventaActual>=v.objetivoVolumen
-                        ? 'linear-gradient(180deg,#2ecc71,#27ae60)'
-                        : 'linear-gradient(180deg,#c29d6d,#8b6940)',
-                      borderRadius:'6px 6px 0 0',
-                      boxShadow: v.ventaActual>=v.objetivoVolumen
-                        ? '0 -4px 12px rgba(39,174,96,.3)'
-                        : '0 -4px 12px rgba(194,157,109,.25)',
-                    }}/>
-                  </div>
-                  <p className="cb-label text-center" style={{fontSize:8,color:'rgba(212,212,216,.5)'}}>
-                    {v.nombre.split(' ')[0]}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Escala */}
-          <div className="flex justify-between mt-3 pt-3" style={{borderTop:'1px solid var(--cb-border)'}}>
-            {vendedoresData.map(v => (
-              <div key={v.id} className="flex-1 text-center">
-                <p className="cb-value" style={{fontSize:9}}>{fmt(v.ventaActual)}</p>
-                <p className="cb-label" style={{fontSize:7,color:'rgba(194,157,109,.5)'}}>{v.zona}</p>
-              </div>
-            ))}
+          <div className="h-[320px] w-full mt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={filteredVendedores} margin={{ top: 20, right: 10, left: 0, bottom: 80 }} barGap={2}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(212,212,216,.05)" />
+                <XAxis 
+                  dataKey="nombre" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  interval={0}
+                  tick={{fontSize: 9, fill: 'var(--cb-muted)', fontFamily: 'Barlow Condensed', fontWeight: 800}}
+                  angle={-45}
+                  textAnchor="end"
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{fontSize: 9, fill: 'var(--cb-muted)'}}
+                  tickFormatter={(v) => `$${(v/1000000).toFixed(1)}M`}
+                  width={55}
+                />
+                <Tooltip 
+                  cursor={{fill: 'rgba(255,255,255,0.03)'}}
+                  contentStyle={{background: 'var(--cb-panel)', border: '1px solid var(--cb-border)', borderRadius: '12px', color: 'var(--cb-chrome)', fontSize: '12px'}}
+                  formatter={(value, name) => [fmt(value), name === 'ventaActual' ? 'Venta Actual' : 'Objetivo']}
+                  labelStyle={{color: 'var(--cb-muted)', fontWeight: 'bold', marginBottom: '4px'}}
+                />
+                <Bar dataKey="objetivoVolumen" fill="rgba(212,212,216,.12)" radius={[4,4,0,0]} name="Objetivo" />
+                <Bar dataKey="ventaActual" fill="var(--cb-bronze)" radius={[4,4,0,0]} name="Venta Actual">
+                  {filteredVendedores.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.ventaActual >= entry.objetivoVolumen ? '#27ae60' : '#c29d6d'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}
@@ -2349,7 +2355,7 @@ function AvanceVendedoresPanel({ vendedoresData, loading, onRefresh, fmt }) {
               </tr>
             </thead>
             <tbody>
-              {[...vendedoresData].sort((a,b) => (b.ventaActual/b.objetivoVolumen)-(a.ventaActual/a.objetivoVolumen)).map(v => {
+            {[...filteredVendedores].sort((a,b) => (b.ventaActual/b.objetivoVolumen)-(a.ventaActual/a.objetivoVolumen)).map(v => {
                 const pct   = v.objetivoVolumen>0?((v.ventaActual/v.objetivoVolumen)*100):0;
                 const rech  = v.ventaActual>0?((v.rechazoAcumulado/v.ventaActual)*100):0;
                 const ok    = v.ventaActual>=v.objetivoVolumen;
