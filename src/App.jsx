@@ -353,7 +353,7 @@ export default function App() {
   // └─────────────────────────────────────────────────────────────────────────────┘
 
   // COLOCAR AQUÍ LA URL DE GOOGLE SHEETS PUBLICADA COMO CSV
-  const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRGd3hd3Ibuo__v1UTYJVCdO-gtgK0JxiFNkachDvt1a2YSMGU5z4YlGfYiANjZYS0G0TqFeFGEF5t3/pub?gid=0&single=true&output=csv";
+  const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRGd3hd3Ibuo__v1UTYJVCdO-gtgK0JxiFNkachDvt1a2YSMGU5z4YlGfYiANjZYS0G0TqFeFGEF5t3/pub?output=csv";
 
   const fetchExcelData = async () => {
     setVendedoresLoading(true);
@@ -366,48 +366,57 @@ export default function App() {
         
         if (rows.length < 2) return;
 
-        // 1. Extraer y limpiar los encabezados (separados por punto y coma)
-        const headers = rows[0].split(';').map(h => h.replace(/^"|"$/g, '').trim());
+        // 1. Extraer y limpiar los encabezados pasándolos a mayúsculas
+        const headers = rows[0].split(';').map(h => h.replace(/^"|"$/g, '').trim().toUpperCase());
 
-        // Lector de números que limpia signos $, % y soluciona formatos (1.000,50 o 1,000.50)
-        const parseCSVNum = (val) => {
+        // 2. Buscar índices de columnas por nombres aproximados
+        const idxVendedor = headers.findIndex(h => h.includes('VENDEDOR'));
+        const idxClientesActivos = headers.findIndex(h => h.includes('CLIENTES ACTIVOS'));
+        const idxObjetivo = headers.findIndex(h => h.includes('OBJETIVO'));
+        const idxAvance = headers.findIndex(h => h.includes('AVANCE'));
+        const idxPctAvance = headers.findIndex(h => h.includes('% AVANCE') || h.includes('%AVANCE') || h.includes('AVANCE %'));
+        const idxRechazo = headers.findIndex(h => h.includes('RECHAZO ACUMUL') || h.includes('RECHAZO'));
+        const idxPctRechazo = headers.findIndex(h => h.includes('RECHA DEL MES') || h.includes('RECHAZO %'));
+        const idxPedidos = headers.findIndex(h => h.includes('PEDIDOS'));
+
+        // Lector de números que limpia formatos numéricos de Argentina
+        const parseArgNumber = (val) => {
           if (!val) return 0;
-          let s = String(val).trim().replace(/[$%A-Za-z\s]/g, '');
-          if (/^-?\d{1,3}(?:\.\d{3})*(?:,\d+)?$/.test(s) || /^-?\d+,\d+$/.test(s)) {
-            s = s.replace(/\./g, '').replace(',', '.');
-          } else {
-            s = s.replace(/,/g, '');
+          // Quita espacios, comillas y el signo $
+          let clean = val.replace(/[\s"$]/g, '');
+          // Si tiene porcentaje %, lo removemos
+          clean = clean.replace('%', '');
+          // Cambiamos puntos de miles por vacío y comas decimales por punto para JavaScript
+          if (clean.includes(',') && clean.includes('.')) {
+            clean = clean.replace(/\./g, '').replace(',', '.');
+          } else if (clean.includes(',')) {
+            clean = clean.replace(',', '.');
           }
-          return Number(s) || 0;
+          return parseFloat(clean) || 0;
         };
 
         const parsed = rows.slice(1).map((row, index) => {
-          // 2. Separar por punto y coma y limpiar comillas en cada celda
+          // 3. Separar por punto y coma y limpiar comillas en cada celda
           const cols = row.split(';').map(c => c.replace(/^"|"$/g, '').trim());
           
-          // Función para buscar el valor por el nombre exacto de la columna
-          const getVal = (colName) => {
-            const idx = headers.indexOf(colName);
-            return idx !== -1 ? cols[idx] : '';
-          };
+          const getVal = (idx) => idx !== -1 && cols[idx] !== undefined ? cols[idx] : '';
 
-          const rechazo = parseCSVNum(getVal('RECHAZO %'));
+          const pctRechazo = parseArgNumber(getVal(idxPctRechazo));
+          const totalPedidos = parseArgNumber(getVal(idxPedidos));
 
-          // 3. Mapear respetando los nombres de tu Excel
+          // 4. Mapear dinámicamente usando los índices encontrados
           return {
             id: String(index + 1),
-            nombre: getVal('VENDEDOR'),
-            zona: 'General', // Puedes mapearlo a otra columna si la agregas
-            clientesActivos: parseCSVNum(getVal('CLIENTES ACTIVOS')),
-            objetivoVolumen: parseCSVNum(getVal('OBJETIVO VOL')),
-            ventaActual: parseCSVNum(getVal('AVANCE VOL')),
-            coberturaPct: parseCSVNum(getVal('COBERTURA %')),
-            rechazoPct: rechazo,
-            devolucionPct: parseCSVNum(getVal('DEVOLUCION %')),
-            
-            // Compatibilidad para que los gráficos de la vista funcionen con porcentajes
-            pedidosTotales: 100, 
-            pedidosRechazados: rechazo
+            nombre: getVal(idxVendedor),
+            zona: 'General',
+            clientesActivos: parseArgNumber(getVal(idxClientesActivos)),
+            objetivoVolumen: parseArgNumber(getVal(idxObjetivo)),
+            ventaActual: parseArgNumber(getVal(idxAvance)),
+            coberturaPct: parseArgNumber(getVal(idxPctAvance !== -1 ? idxPctAvance : idxAvance)),
+            montoRechazado: parseArgNumber(getVal(idxRechazo)),
+            rechazoPct: pctRechazo,
+            pedidosTotales: totalPedidos,
+            pedidosRechazados: Math.round((pctRechazo / 100) * totalPedidos) || 0
           };
         }).filter(v => v.nombre); // Evitar filas vacías
 
