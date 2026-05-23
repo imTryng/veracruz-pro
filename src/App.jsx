@@ -362,20 +362,12 @@ export default function App() {
         // ── Fetch real desde Google Sheets ──────────────────────────────────────
         const res  = await fetch(GOOGLE_SHEET_CSV_URL);
         const text = await res.text();
-        const rows = text.trim().split('\n').slice(1); // omitir encabezado
+        const rows = text.trim().split('\n');
         
-        // Lector inteligente de CSV que ignora comas dentro de comillas
-        const parseCSVRow = (str) => {
-          const res = [];
-          let curr = '', inQ = false;
-          for (let i = 0; i < str.length; i++) {
-            if (str[i] === '"') inQ = !inQ;
-            else if (str[i] === ',' && !inQ) { res.push(curr.trim()); curr = ''; }
-            else curr += str[i];
-          }
-          res.push(curr.trim());
-          return res;
-        };
+        if (rows.length < 2) return;
+
+        // 1. Extraer y limpiar los encabezados (separados por punto y coma)
+        const headers = rows[0].split(';').map(h => h.replace(/^"|"$/g, '').trim());
 
         // Lector de números que limpia signos $, % y soluciona formatos (1.000,50 o 1,000.50)
         const parseCSVNum = (val) => {
@@ -389,13 +381,33 @@ export default function App() {
           return Number(s) || 0;
         };
 
-        const parsed = rows.map(row => {
-          const cols = parseCSVRow(row);
+        const parsed = rows.slice(1).map((row, index) => {
+          // 2. Separar por punto y coma y limpiar comillas en cada celda
+          const cols = row.split(';').map(c => c.replace(/^"|"$/g, '').trim());
+          
+          // Función para buscar el valor por el nombre exacto de la columna
+          const getVal = (colName) => {
+            const idx = headers.indexOf(colName);
+            return idx !== -1 ? cols[idx] : '';
+          };
+
+          const rechazo = parseCSVNum(getVal('RECHAZO %'));
+
+          // 3. Mapear respetando los nombres de tu Excel
           return {
-            id: cols[0], nombre: cols[1], zona: cols[2],
-            objetivoVolumen: parseCSVNum(cols[3]), ventaActual: parseCSVNum(cols[4]),
-            clientesActivos: parseCSVNum(cols[5]), pedidosTotales: parseCSVNum(cols[6]),
-            pedidosRechazados: parseCSVNum(cols[7]),
+            id: String(index + 1),
+            nombre: getVal('VENDEDOR'),
+            zona: 'General', // Puedes mapearlo a otra columna si la agregas
+            clientesActivos: parseCSVNum(getVal('CLIENTES ACTIVOS')),
+            objetivoVolumen: parseCSVNum(getVal('OBJETIVO VOL')),
+            ventaActual: parseCSVNum(getVal('AVANCE VOL')),
+            coberturaPct: parseCSVNum(getVal('COBERTURA %')),
+            rechazoPct: rechazo,
+            devolucionPct: parseCSVNum(getVal('DEVOLUCION %')),
+            
+            // Compatibilidad para que los gráficos de la vista funcionen con porcentajes
+            pedidosTotales: 100, 
+            pedidosRechazados: rechazo
           };
         }).filter(v => v.nombre); // Evitar filas vacías
 
