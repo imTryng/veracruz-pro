@@ -346,14 +346,14 @@ export default function App() {
     ].filter(d => d.value > 0);
 
     const truckStats = trucks.map(t => {
-      const tHist    = activeHistory.filter(h => h.truckId===t.id);
-      const varTotal = tHist.reduce((a,h) => a+(Number(h.amount)||0), 0);
-      const fixTotal = (Number(t.seguro)||0)+(Number(t.vtv_costo)||0)+(Number(t.muni_costo)||0);
-      const total    = varTotal + fixTotal;
-      const desglose = tHist.reduce((acc,h) => {
+      const tHist     = activeHistory.filter(h => h.truckId===t.id);
+      const fuelTotal = tHist.filter(h =>  isFuel(h.categoryLabel)).reduce((a,h) => a+(Number(h.amount)||0), 0);
+      const maintTotal= tHist.filter(h => !isFuel(h.categoryLabel)).reduce((a,h) => a+(Number(h.amount)||0), 0);
+      const total     = fuelTotal + maintTotal;
+      const desglose  = tHist.filter(h => !isFuel(h.categoryLabel)).reduce((acc,h) => {
         const cat=h.categoryLabel||'VARIOS'; acc[cat]=(acc[cat]||0)+(Number(h.amount)||0); return acc;
       },{});
-      return {...t, varTotal, fixTotal, total, desglose};
+      return {...t, fuelTotal, maintTotal, total, desglose};
     }).filter(t =>
       t.patente.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (t.chofer||'').toLowerCase().includes(searchTerm.toLowerCase())
@@ -830,7 +830,6 @@ function AlertPanel({ alerts }) {
 function DashboardPanel({stats,trucks,fmt}) {
   const combustiblePct   = stats.grandTotal>0?((stats.pieData.find((d)=>d.name==='Combustible')?.value||0)/stats.grandTotal*100).toFixed(1):0;
   const mantenimientoPct = stats.grandTotal>0?((stats.pieData.find((d)=>d.name==='Mantenimiento')?.value||0)/stats.grandTotal*100).toFixed(1):0;
-  const fixTotal         = stats.truckStats.reduce((a,t)=>a+t.fixTotal,0);
 
   return (
     <div className="space-y-5">
@@ -850,11 +849,10 @@ function DashboardPanel({stats,trucks,fmt}) {
         <SubKpi label="Promedio por Unidad" value={fmt(stats.grandTotal/(trucks.length||1))} Icon={TrendingUp} accent="#7c3aed" bg="#f5f3ff" border="#ddd6fe" mono />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {[
           {label:'Combustible',   emoji:'⛽', pct:combustiblePct,   val:stats.pieData.find((d)=>d.name==='Combustible')?.value||0,   color:'#0ea5e9', bg:'#f0f9ff', border:'#bae6fd', barColor:'linear-gradient(90deg,#38bdf8,#0ea5e9)'},
           {label:'Mantenimiento', emoji:'🔧', pct:mantenimientoPct, val:stats.pieData.find((d)=>d.name==='Mantenimiento')?.value||0, color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe', barColor:'linear-gradient(90deg,#60a5fa,#2563eb)'},
-          {label:'Costos Fijos',  emoji:'🛡', pct:stats.grandTotal>0?(fixTotal/stats.grandTotal*100).toFixed(1):0, val:fixTotal,         color:'#16a34a', bg:'#f0fdf4', border:'#bbf7d0', barColor:'linear-gradient(90deg,#4ade80,#16a34a)'},
         ].map(item => (
           <div key={item.label} className="rounded-2xl p-5 border" style={{background:item.bg,borderColor:item.border}}>
             <div className="flex items-center gap-2 mb-3">
@@ -880,7 +878,7 @@ function DashboardPanel({stats,trucks,fmt}) {
               <p className="text-[10px] mt-0.5" style={{color:'var(--oxford)'}}>Fijos + Variables del período</p>
             </div>
             <div className="flex gap-3">
-              {[['#2563eb','Fijos'],['#f97316','Variables']].map(([c,l]) => (
+              {[['#0ea5e9','Combustible'],['#f97316','Mantenimiento']].map(([c,l]) => (
                 <div key={l} className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm" style={{background:c}}/><span className="text-[9px] font-bold uppercase" style={{color:'var(--oxford)'}}>{l}</span></div>
               ))}
             </div>
@@ -892,8 +890,8 @@ function DashboardPanel({stats,trucks,fmt}) {
                 <XAxis dataKey="patente" axisLine={false} tickLine={false} tick={{fontSize:10,fontWeight:'700',fill:'#64748b',fontFamily:'Barlow Condensed'}} />
                 <YAxis axisLine={false} tickLine={false} tick={{fontSize:9,fill:'#94a3b8'}} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
                 <Tooltip content={<BarTooltip fmt={fmt}/>} />
-                <Bar dataKey="fixTotal" stackId="a" fill="#2563eb" name="Fijos" />
-                <Bar dataKey="varTotal" stackId="a" fill="#f97316" radius={[5,5,0,0]} name="Variables" />
+                <Bar dataKey="fuelTotal"  stackId="a" fill="#0ea5e9" name="Combustible" />
+                <Bar dataKey="maintTotal" stackId="a" fill="#f97316" radius={[5,5,0,0]} name="Mantenimiento" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -908,7 +906,7 @@ function DashboardPanel({stats,trucks,fmt}) {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={stats.pieData} innerRadius={50} outerRadius={68} paddingAngle={4} dataKey="value" strokeWidth={0}>
-                    <Cell fill="#f97316"/><Cell fill="#2563eb"/>
+                    <Cell fill="#0ea5e9"/><Cell fill="#f97316"/>
                   </Pie>
                   <Tooltip formatter={(v) => fmt(v)} />
                 </PieChart>
@@ -916,7 +914,7 @@ function DashboardPanel({stats,trucks,fmt}) {
             </div>
           </div>
           <div className="space-y-2">
-            {[{label:'Combustible',val:stats.pieData.find((d)=>d.name==='Combustible')?.value||0,color:'#f97316',bg:'#fff7ed'},{label:'Mantenimiento',val:stats.pieData.find((d)=>d.name==='Mantenimiento')?.value||0,color:'#2563eb',bg:'#eff6ff'}].map(item => (
+            {[{label:'Combustible',val:stats.pieData.find((d)=>d.name==='Combustible')?.value||0,color:'#0ea5e9',bg:'#f0f9ff'},{label:'Mantenimiento',val:stats.pieData.find((d)=>d.name==='Mantenimiento')?.value||0,color:'#f97316',bg:'#fff7ed'}].map(item => (
               <div key={item.label} className="flex items-center justify-between rounded-xl px-3 py-2" style={{background:item.bg}}>
                 <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{background:item.color}}/><span className="text-[9px] font-bold uppercase" style={{color:item.color}}>{item.label}</span></div>
                 <span className="font-mono text-[10px] font-bold" style={{color:'var(--navy)'}}>{fmt(item.val)}</span>
@@ -957,9 +955,9 @@ function DashboardPanel({stats,trucks,fmt}) {
           </div>
           <div className="space-y-2">
             {stats.ranking.map((t, i) => {
-              const pct    = stats.grandTotal>0?(t.total/stats.grandTotal*100):0;
-              const fixPct = t.total>0?(t.fixTotal/t.total*100):0;
-              const varPct = t.total>0?(t.varTotal/t.total*100):0;
+              const pct      = stats.grandTotal>0?(t.total/stats.grandTotal*100):0;
+              const fuelPct  = t.total>0?(t.fuelTotal/t.total*100):0;
+              const maintPct = t.total>0?(t.maintTotal/t.total*100):0;
               const medals = ['🥇','🥈','🥉'];
               return (
                 <div key={t.id} className="grid grid-cols-12 gap-2 items-center px-3 py-3 rounded-xl"
@@ -971,12 +969,12 @@ function DashboardPanel({stats,trucks,fmt}) {
                   </div>
                   <div className="col-span-4">
                     <div className="h-2 rounded-full overflow-hidden flex" style={{background:'var(--ice)'}}>
-                      <div className="h-full" style={{width:`${fixPct}%`,background:'#2563eb'}}/>
-                      <div className="h-full" style={{width:`${varPct}%`,background:'#f97316'}}/>
+                      <div className="h-full" style={{width:`${fuelPct}%`,background:'#0ea5e9'}}/>
+                      <div className="h-full" style={{width:`${maintPct}%`,background:'#f97316'}}/>
                     </div>
                     <div className="flex gap-2 mt-0.5">
-                      <span className="text-[7px] font-bold" style={{color:'#2563eb'}}>{fixPct.toFixed(0)}% F</span>
-                      <span className="text-[7px] font-bold" style={{color:'#f97316'}}>{varPct.toFixed(0)}% V</span>
+                      <span className="text-[7px] font-bold" style={{color:'#0ea5e9'}}>{fuelPct.toFixed(0)}% C</span>
+                      <span className="text-[7px] font-bold" style={{color:'#f97316'}}>{maintPct.toFixed(0)}% M</span>
                     </div>
                   </div>
                   <div className="col-span-2 text-right">
@@ -1225,18 +1223,19 @@ function TruckCard({truck, onDelete, onEdit}) {
       </div>
 
       <div className="space-y-2 pt-3 border-t" style={{borderColor:'var(--ice)'}}>
-        {[{label:'Seguro',val:truck.seguro},{label:'VTV',val:truck.vtv_costo},{label:'Hab. Municipal',val:truck.muni_costo}].map((item,idx) => (
-          <div key={idx} className="flex items-center justify-between">
-            <span className="text-[8px] font-bold uppercase" style={{color:'var(--oxford)'}}>{item.label}</span>
-            <span className="font-mono text-[9px] font-bold" style={{color:'var(--navy)'}}>{fmt(item.val)}</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Fuel size={11} style={{color:'var(--fuel)'}}/>
+            <span className="text-[8px] font-bold uppercase" style={{color:'var(--oxford)'}}>Combustible</span>
           </div>
-        ))}
+          <span className="font-mono text-[9px] font-bold" style={{color:'var(--fuel)'}}>{fmt(truck.fuelTotal)}</span>
+        </div>
       </div>
 
       <button onClick={() => setShowVar(!showVar)} className="w-full mt-3 pt-3 border-t flex items-center justify-between text-left" style={{borderColor:'var(--ice)'}}>
-        <span className="text-[8px] font-bold uppercase" style={{color:'var(--oxford)'}}>Variables del Período</span>
+        <span className="text-[8px] font-bold uppercase" style={{color:'var(--oxford)'}}>Mantenimiento</span>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[9px] font-bold" style={{color:'#f97316'}}>{fmt(truck.varTotal)}</span>
+          <span className="font-mono text-[9px] font-bold" style={{color:'#f97316'}}>{fmt(truck.maintTotal)}</span>
           {showVar?<ChevronUp size={11} style={{color:'var(--oxford)'}}/>:<ChevronDown size={11} style={{color:'var(--oxford)'}}/>}
         </div>
       </button>
@@ -1303,10 +1302,6 @@ function AltaUnidadModal({initial={}, onSubmit, onClose}) {
       await onSubmit({
         ...fields,
         tipoFuel, status,
-        habMunicipal: Number(fd.get('habMunicipal'))||0,
-        seguro:      Number(fd.get('seguroMonto'))||0,
-        vtv_costo:   Number(fd.get('vtvMonto'))||0,
-        muni_costo:  Number(fd.get('habMunicipal'))||0,
         seguro_venc: String(fd.get('seguroVenc')||''),
         vtv_venc:    String(fd.get('vtvVenc')||''),
         seguro_poliza: String(fd.get('seguroPoliza')||''),
@@ -1428,20 +1423,6 @@ function AltaUnidadModal({initial={}, onSubmit, onClose}) {
             <input name="capacidadTanque" type="number" step="1" placeholder="300" defaultValue={initial.capacidadTanque||''}
               className={`inp w-full p-3 text-sm${errors.capacidadTanque?' border-red-400':''}`} />
             <FieldErr msg={errors.capacidadTanque} />
-          </div>
-
-          <SectionHead Icon={Wrench} title="Costos Fijos" accent="var(--success)" />
-
-          <div className="grid grid-cols-3 gap-3">
-            {[{name:'seguroMonto',label:'Seguro ($/mes)',  val:initial.seguro},
-              {name:'vtvMonto',   label:'VTV ($/mes)',      val:initial.vtv_costo},
-              {name:'habMunicipal',label:'Hab. Mun. ($/mes)', val:initial.muni_costo}
-            ].map(f => (
-              <div key={f.name}>
-                <label className="text-[8px] font-bold uppercase block mb-1" style={{color:'var(--oxford)'}}>{f.label}</label>
-                <input name={f.name} type="number" placeholder="0" defaultValue={f.val||''} className="inp w-full p-2.5 text-sm" />
-              </div>
-            ))}
           </div>
 
           <SectionHead Icon={FileText} title="Documentación — Seguro" accent="var(--accent)" />
@@ -1973,8 +1954,8 @@ function BarTooltip({active,payload,fmt}) {
   return (
     <div className="p-3 rounded-xl shadow-2xl text-white text-xs" style={{background:'var(--navy)'}}>
       <p className="text-[8px] font-bold uppercase mb-2" style={{color:'var(--oxford)'}}>{payload[0]?.payload?.patente}</p>
-      <p className="font-bold flex justify-between gap-5"><span className="opacity-50">Fijos:</span>{fmt(payload[0]?.value||0)}</p>
-      <p className="font-bold flex justify-between gap-5" style={{color:'#fb923c'}}><span className="opacity-50 text-white">Variables:</span>{fmt(payload[1]?.value||0)}</p>
+      <p className="font-bold flex justify-between gap-5" style={{color:'#7dd3fc'}}><span className="opacity-50 text-white">Combustible:</span>{fmt(payload[0]?.value||0)}</p>
+      <p className="font-bold flex justify-between gap-5" style={{color:'#fb923c'}}><span className="opacity-50 text-white">Mantenimiento:</span>{fmt(payload[1]?.value||0)}</p>
     </div>
   );
 }
