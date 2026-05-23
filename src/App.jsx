@@ -49,13 +49,8 @@ const FUEL_TYPES   = ['diesel','nafta','gnc'];
 const TRUCK_STATUS = ['disponible','en_viaje','en_taller','inactivo'];
 
 const ALERT_THRESHOLDS = {
-  DOCS_WARNING_DAYS:   15,
-  SERVICE_WARNING_KM:  1000,
-  SERVICE_CRITICAL_KM: 500,
-  EFFICIENCY_DROP_PCT: 15,
+  DOCS_WARNING_DAYS: 15,
 };
-
-const EFFICIENCY_THRESHOLDS = { OPTIMO: 4, REGULAR: 3 };
 
 const STATUS_META = {
   disponible: { label:'Disponible', color:'var(--success)', bg:'#f0fdf4', border:'#bbf7d0' },
@@ -75,20 +70,9 @@ function daysUntil(dateStr, today = TODAY) {
 
 function isFuel(label) { return (label || '').toLowerCase().startsWith('combustible'); }
 
-function calcRendimiento(prevKm, currKm, litros) {
-  if (currKm <= prevKm || litros <= 0) return null;
-  return (currKm - prevKm) / litros;
-}
-
-function classifyRend(v) {
-  if (v >= EFFICIENCY_THRESHOLDS.OPTIMO)  return 'optimo';
-  if (v >= EFFICIENCY_THRESHOLDS.REGULAR) return 'regular';
-  return 'deficiente';
-}
-
 // ─── Alert engine (pure) ──────────────────────────────────────────────────────
 
-function generateAlerts(trucks, history) {
+function generateAlerts(trucks) {
   const alerts = [];
 
   for (const truck of trucks) {
@@ -110,29 +94,6 @@ function generateAlerts(trucks, history) {
         alerts.push({ ...base, key:`${truck.id}-vtv-v`, type:'vtv_vencido',       severity:'critical', message:`VTV VENCIDA hace ${Math.abs(d)} día${Math.abs(d)!==1?'s':''}`,     daysRemaining:d, rawValue:truck.vtv_venc });
       else if (d <= ALERT_THRESHOLDS.DOCS_WARNING_DAYS)
         alerts.push({ ...base, key:`${truck.id}-vtv-p`, type:'vtv_proximo',       severity:'warning',  message:`VTV vence en ${d} día${d!==1?'s':''}`,                               daysRemaining:d, rawValue:truck.vtv_venc });
-    }
-
-    // 3. Service preventivo por KM
-    if (truck.kmProximoService && truck.kmProximoService > 0) {
-      const kmRem = truck.kmProximoService - (truck.kmActual || 0);
-      if (kmRem <= 0)
-        alerts.push({ ...base, key:`${truck.id}-svc-v`, type:'service_vencido',  severity:'critical', message:`Service VENCIDO — exceso ${Math.abs(kmRem).toLocaleString('es-AR')} km`, kmRemaining:kmRem, rawValue:truck.kmProximoService });
-      else if (kmRem <= ALERT_THRESHOLDS.SERVICE_CRITICAL_KM)
-        alerts.push({ ...base, key:`${truck.id}-svc-c`, type:'service_proximo',  severity:'critical', message:`Service en ${kmRem.toLocaleString('es-AR')} km — ¡URGENTE!`,            kmRemaining:kmRem, rawValue:truck.kmProximoService });
-      else if (kmRem <= ALERT_THRESHOLDS.SERVICE_WARNING_KM)
-        alerts.push({ ...base, key:`${truck.id}-svc-w`, type:'service_proximo',  severity:'warning',  message:`Service próximo — restan ${kmRem.toLocaleString('es-AR')} km`,           kmRemaining:kmRem, rawValue:truck.kmProximoService });
-    }
-
-    // 4. Rendimiento combustible
-    const loads = history
-      .filter(h => h.truckId===truck.id && h.status!=='baja' && isFuel(h.categoryLabel) && (h.litros||0)>0 && (h.km_registro||0)>0)
-      .sort((a,b) => a.timestamp - b.timestamp);
-    if (loads.length >= 2) {
-      const last = loads[loads.length - 1];
-      const prev = loads[loads.length - 2];
-      const rend = calcRendimiento(prev.km_registro, last.km_registro, last.litros);
-      if (rend !== null && rend < EFFICIENCY_THRESHOLDS.REGULAR)
-        alerts.push({ ...base, key:`${truck.id}-rend`, type:'rendimiento_bajo', severity: rend<2?'critical':'warning', message:`Rendimiento bajo: ${rend.toFixed(2)} km/l`, rawValue:rend });
     }
   }
 
@@ -389,12 +350,10 @@ export default function App() {
       const varTotal = tHist.reduce((a,h) => a+(Number(h.amount)||0), 0);
       const fixTotal = (Number(t.seguro)||0)+(Number(t.vtv_costo)||0)+(Number(t.muni_costo)||0);
       const total    = varTotal + fixTotal;
-      const kmRecorridos = Math.max(0,(t.kmActual||0)-(t.kmInicio||0));
-      const costoPorKm   = kmRecorridos>0 ? total/kmRecorridos : 0;
       const desglose = tHist.reduce((acc,h) => {
         const cat=h.categoryLabel||'VARIOS'; acc[cat]=(acc[cat]||0)+(Number(h.amount)||0); return acc;
       },{});
-      return {...t, varTotal, fixTotal, total, kmRecorridos, costoPorKm, desglose};
+      return {...t, varTotal, fixTotal, total, desglose};
     }).filter(t =>
       t.patente.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (t.chofer||'').toLowerCase().includes(searchTerm.toLowerCase())
@@ -419,48 +378,15 @@ export default function App() {
   }, [trucks, history, searchTerm, dateRange]);
 
   // ── Fleet alerts ──────────────────────────────────────────────────────────────
-  const fleetAlerts = useMemo(() => generateAlerts(trucks, history), [trucks, history]);
+  const fleetAlerts = useMemo(() => generateAlerts(trucks), [trucks]);
 
-  // ── Efficiency ────────────────────────────────────────────────────────────────
-  const efficiencyStats = useMemo(() => {
-    const fuelLoads = history
-      .filter(h => isFuel(h.categoryLabel) && h.status!=='baja' && (h.litros||0)>0 && (h.km_registro||0)>0)
-      .sort((a,b) => a.timestamp - b.timestamp);
-
-    const byTruck = {};
-    fuelLoads.forEach(h => {
-      if (!byTruck[h.truckId]) byTruck[h.truckId] = {truckId:h.truckId,patente:h.truck,loads:[]};
-      byTruck[h.truckId].loads.push(h);
-    });
-
-    const truckEfficiency = Object.values(byTruck).map(({truckId,patente,loads}) => {
-      const segments = [];
-      for (let i=1; i<loads.length; i++) {
-        const prev = loads[i-1], curr = loads[i];
-        const kmDiff = curr.km_registro - prev.km_registro;
-        if (kmDiff>0 && curr.litros>0)
-          segments.push({ fecha:curr.date, timestamp:curr.timestamp, kmDiff, litros:curr.litros,
-            kmPerLitro:kmDiff/curr.litros, precioPorLitro:curr.precio_por_litro||(curr.amount/curr.litros),
-            monto:curr.amount, km_registro:curr.km_registro });
-      }
-      const lastKmPL = segments.length>0 ? segments[segments.length-1].kmPerLitro : null;
-      const prevKmPL = segments.length>1 ? segments[segments.length-2].kmPerLitro : null;
-      const avgKmPL  = segments.length>0 ? segments.reduce((a,s) => a+s.kmPerLitro,0)/segments.length : null;
-      const desvio   = (lastKmPL!==null&&prevKmPL!==null) ? ((lastKmPL-prevKmPL)/prevKmPL)*100 : null;
-      return {truckId,patente,segments,lastKmPL,prevKmPL,avgKmPL,desvio,lastLoad:loads[loads.length-1],
-        totalKm:segments.reduce((a,s)=>a+s.kmDiff,0), totalLitros:loads.reduce((a,l)=>a+l.litros,0)};
-    });
-
-    const valid = truckEfficiency.filter(t => t.avgKmPL!==null);
-    const fleetAvgKmL = valid.length>0 ? valid.reduce((a,t)=>a+t.avgKmPL,0)/valid.length : 0;
-    const totalFuelCost = history.filter(h=>isFuel(h.categoryLabel)&&h.status!=='baja').reduce((a,h)=>a+Number(h.amount),0);
-    const totalKmFleet  = truckEfficiency.reduce((a,t)=>a+t.totalKm,0);
-    const costPerKm      = totalKmFleet>0 ? totalFuelCost/totalKmFleet : 0;
-    const desvioAlerts  = truckEfficiency.filter(t => t.desvio!==null && t.desvio<-ALERT_THRESHOLDS.EFFICIENCY_DROP_PCT);
-    const priceEvolution = fuelLoads.filter(h=>h.precio_por_litro>0).slice(-12)
-      .map(h => ({fecha:h.date?.split(',')[0]||'',precio:Number(h.precio_por_litro)||0,patente:h.truck}));
-
-    return {truckEfficiency,fleetAvgKmL,costPerKm,desvioAlerts,priceEvolution,totalKmFleet};
+  // ── Fuel price evolution ───────────────────────────────────────────────────────
+  const priceEvolution = useMemo(() => {
+    return history
+      .filter(h => isFuel(h.categoryLabel) && h.status!=='baja' && (h.precio_por_litro||0)>0)
+      .sort((a,b) => a.timestamp - b.timestamp)
+      .slice(-12)
+      .map(h => ({fecha:h.date?.split(',')[0]||'', precio:Number(h.precio_por_litro)||0, patente:h.truck}));
   }, [history]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -468,7 +394,7 @@ export default function App() {
   const handleAddTruck = async (data) => {
     try {
       await addDoc(collection(db,'artifacts',appId,'public','data','trucks'), {
-        ...data, historialService:[], timestamp:Date.now(),
+        ...data, timestamp:Date.now(),
       });
       setModals(p => ({...p,truck:false})); showNotif("Unidad registrada");
     } catch { showNotif("Error al guardar","error"); }
@@ -493,18 +419,15 @@ export default function App() {
     const label    = category==='varios'&&extra.variosDesc
       ? `VARIOS - ${extra.variosDesc.toUpperCase()}`
       : category.toUpperCase();
-    const litros      = parseFloat(fd.get('litros'))||0;
-    const km_registro = parseFloat(fd.get('km_registro'))||0;
+    const litros   = parseFloat(fd.get('litros'))||0;
     const precio_por_litro = litros>0 ? amount/litros : 0;
     try {
       await addDoc(collection(db,'artifacts',appId,'public','data','history'), {
         truckId, truck:truck.patente, categoryLabel:label, amount,
         responsible:user.email, status:'active', timestamp:Date.now(),
         date:new Date().toLocaleString('es-AR'), historialEdiciones:[],
-        ...(isFuel(label)&&{litros,km_registro,precio_por_litro}),
+        ...(isFuel(label)&&litros>0&&{litros,precio_por_litro}),
       });
-      if (isFuel(label)&&km_registro>0)
-        await updateDoc(doc(db,'artifacts',appId,'public','data','trucks',truckId),{kmActual:km_registro});
       setModals(p => ({...p,expense:false})); showNotif("Gasto registrado");
     } catch { showNotif("Error al registrar","error"); }
   };
@@ -568,7 +491,7 @@ export default function App() {
       const XLSX = (await import('xlsx')).default || (await import('xlsx'));
       const data = stats.activeHistory.map(h => ({
         Fecha:h.date, Unidad:h.truck, Concepto:h.categoryLabel, Monto:h.amount,
-        Litros:h.litros||'', KM_Registro:h.km_registro||'', Precio_Litro:h.precio_por_litro||'',
+        Litros:h.litros||'', Precio_Litro:h.precio_por_litro||'',
         Responsable:h.responsible,
         UltimaEdicion:h.ultimaEdicion?`${h.ultimaEdicion.editadoPor} (${h.ultimaEdicion.fecha})`:'',
       }));
@@ -593,7 +516,6 @@ export default function App() {
   if (authLoading) return (<><style>{globalStyles}</style><LoadingScreen /></>);
   if (showLogin)   return (<><style>{globalStyles}</style><LoginComponent onLogin={handleLogin} /></>);
 
-  // Driver view — simplified mobile interface
   if (userRole === ROLES.DRIVER) {
     return (
       <>
@@ -605,10 +527,10 @@ export default function App() {
   }
 
   const TABS = [
-    {id:'dashboard',  label:'Panel'},
-    {id:'units',      label:'Flota'},
-    {id:'history',    label:'Gastos'},
-    {id:'efficiency', label:'Eficiencia'},
+    {id:'dashboard', label:'Panel'},
+    {id:'units',     label:'Flota'},
+    {id:'history',   label:'Gastos'},
+    {id:'fuel',      label:'Combustible'},
   ];
 
   return (
@@ -707,10 +629,10 @@ export default function App() {
           {/* Alert Panel */}
           <AlertPanel alerts={fleetAlerts} />
 
-          {activeTab==='dashboard'   && <DashboardPanel  stats={stats}  trucks={trucks} fmt={fmt} />}
-          {activeTab==='units'       && <FlotaPanel      stats={stats}  setModals={setModals} />}
-          {activeTab==='history'    && <HistoryTable    allPeriod={stats.allPeriod} trucks={trucks} truckFilter={historyTruckFilter} onTruckFilter={setHistoryTruckFilter} onBaja={handleBajaExpense} onEdit={item => setModals(m => ({...m,editExpense:item}))} fmt={fmt} onExport={handleExportExcel} />}
-          {activeTab==='efficiency' && <EfficiencyPanel effStats={efficiencyStats} trucks={trucks} fmt={fmt} fmtN={fmtN} />}
+          {activeTab==='dashboard' && <DashboardPanel stats={stats} trucks={trucks} fmt={fmt} />}
+          {activeTab==='units'     && <FlotaPanel     stats={stats} setModals={setModals} />}
+          {activeTab==='history'   && <HistoryTable   allPeriod={stats.allPeriod} trucks={trucks} truckFilter={historyTruckFilter} onTruckFilter={setHistoryTruckFilter} onBaja={handleBajaExpense} onEdit={item => setModals(m => ({...m,editExpense:item}))} fmt={fmt} onExport={handleExportExcel} />}
+          {activeTab==='fuel'      && <FuelPanel priceEvolution={priceEvolution} history={history} trucks={trucks} fmt={fmt} fmtN={fmtN} />}
         </main>
 
         {/* FAB */}
@@ -722,7 +644,7 @@ export default function App() {
         {/* MODALS */}
         {modals.truck      && <AltaUnidadModal onSubmit={handleAddTruck} onClose={() => setModals(p => ({...p,truck:false}))} />}
         {modals.editTruck  && <AltaUnidadModal initial={modals.editTruck} onSubmit={data => handleEditTruck(data,modals.editTruck.id)} onClose={() => setModals(p => ({...p,editTruck:null}))} />}
-        {modals.expense    && <ExpenseModal trucks={trucks} onSubmit={handleAddExpense} history={history} onClose={() => setModals(m => ({...m,expense:false}))} />}
+        {modals.expense    && <ExpenseModal trucks={trucks} onSubmit={handleAddExpense} onClose={() => setModals(m => ({...m,expense:false}))} />}
         {modals.editExpense && <EditExpenseModal item={modals.editExpense} fmt={fmt} onSave={handleEditExpense} onClose={() => setModals(m => ({...m,editExpense:null}))} />}
 
         {modals.delete && (
@@ -843,14 +765,10 @@ function AlertPanel({ alerts }) {
   const ALERT_ICON = {
     seguro_vencido: ShieldAlert, seguro_proximo: ShieldAlert,
     vtv_vencido: AlertTriangle, vtv_proximo: AlertTriangle,
-    service_proximo: Wrench, service_vencido: Wrench,
-    rendimiento_bajo: Fuel,
   };
   const ALERT_CAT = {
     seguro_vencido:'Seguro', seguro_proximo:'Seguro',
     vtv_vencido:'VTV', vtv_proximo:'VTV',
-    service_proximo:'Service', service_vencido:'Service',
-    rendimiento_bajo:'Combustible',
   };
 
   return (
@@ -895,14 +813,6 @@ function AlertPanel({ alerts }) {
                     <Clock size={9} style={{color:isCrit?'var(--danger)':'var(--warn)'}} />
                     <span className="text-[8px] font-bold" style={{color:isCrit?'var(--danger)':'var(--warn)'}}>
                       {alert.daysRemaining<0?`Expiró el ${alert.rawValue}`:`Vence: ${alert.rawValue}`}
-                    </span>
-                  </div>
-                )}
-                {alert.kmRemaining!==undefined && (
-                  <div className="flex items-center gap-1 mt-1">
-                    <Gauge size={9} style={{color:isCrit?'var(--danger)':'var(--warn)'}} />
-                    <span className="text-[8px] font-bold" style={{color:isCrit?'var(--danger)':'var(--warn)'}}>
-                      Service: {Number(alert.rawValue).toLocaleString('es-AR')} km
                     </span>
                   </div>
                 )}
@@ -1071,7 +981,6 @@ function DashboardPanel({stats,trucks,fmt}) {
                   </div>
                   <div className="col-span-2 text-right">
                     <p className="font-mono font-bold text-xs" style={{color:'var(--navy)'}}>{fmt(t.total)}</p>
-                    {t.costoPorKm>0&&<p className="text-[8px]" style={{color:'var(--oxford)'}}>{fmt(t.costoPorKm)}/km</p>}
                   </div>
                   <div className="col-span-2 text-right">
                     <span className="inline-block px-2 py-0.5 rounded-lg text-[9px] font-bold" style={{background:'rgba(37,99,235,.08)',color:'var(--accent)'}}>{pct.toFixed(1)}%</span>
@@ -1086,58 +995,55 @@ function DashboardPanel({stats,trucks,fmt}) {
   );
 }
 
-// ─── EFFICIENCY PANEL ─────────────────────────────────────────────────────────
+// ─── FUEL PANEL ───────────────────────────────────────────────────────────────
 
-function EfficiencyPanel({effStats,trucks,fmt,fmtN}) {
-  const {truckEfficiency,fleetAvgKmL,costPerKm,desvioAlerts,priceEvolution} = effStats;
-  const kmLBadge = (kmL) => {
-    if (kmL===null) return <span className="px-2 py-0.5 rounded-lg text-[8px] font-bold" style={{background:'var(--ice)',color:'var(--oxford)'}}>Sin datos</span>;
-    if (kmL>=4) return <span className="badge-good px-2 py-0.5 rounded-lg text-[8px] font-bold">{fmtN(kmL,2)} km/l</span>;
-    if (kmL>=3) return <span className="badge-warn px-2 py-0.5 rounded-lg text-[8px] font-bold">{fmtN(kmL,2)} km/l</span>;
-    return <span className="badge-bad px-2 py-0.5 rounded-lg text-[8px] font-bold">{fmtN(kmL,2)} km/l</span>;
-  };
+function FuelPanel({priceEvolution, history, trucks, fmt, fmtN}) {
+  const fuelHistory = history.filter(h => isFuel(h.categoryLabel) && h.status!=='baja');
+  const totalSpent  = fuelHistory.reduce((a,h) => a+Number(h.amount), 0);
+  const totalLitros = fuelHistory.reduce((a,h) => a+(Number(h.litros)||0), 0);
+  const avgPrice    = totalLitros>0 ? totalSpent/totalLitros : 0;
+
+  // Per-truck fuel summary
+  const byTruck = trucks.map(t => {
+    const loads    = fuelHistory.filter(h => h.truckId===t.id);
+    const monto    = loads.reduce((a,h) => a+Number(h.amount), 0);
+    const litros   = loads.reduce((a,h) => a+(Number(h.litros)||0), 0);
+    const avgP     = litros>0 ? monto/litros : 0;
+    return {...t, monto, litros, avgPrice:avgP, loads:loads.length};
+  }).filter(t => t.loads>0).sort((a,b) => b.monto-a.monto);
 
   return (
     <div className="space-y-5 anim-up">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="kpi-hero p-6 flex flex-col justify-between sm:col-span-1" style={{minHeight:160}}>
+        <div className="kpi-hero p-6 flex flex-col justify-between" style={{minHeight:150}}>
           <div className="relative flex items-center justify-between mb-3">
             <div className="p-2 rounded-xl" style={{background:'rgba(14,165,233,.25)'}}><Fuel size={15} style={{color:'#7dd3fc'}} /></div>
-            <span className="text-[7px] font-bold uppercase tracking-widest px-2 py-1 rounded-full" style={{color:'#7dd3fc',background:'rgba(14,165,233,.18)'}}>Flota</span>
+            <span className="text-[7px] font-bold uppercase tracking-widest px-2 py-1 rounded-full" style={{color:'#7dd3fc',background:'rgba(14,165,233,.18)'}}>Total</span>
           </div>
           <div className="relative">
-            <p className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{color:'rgba(255,255,255,.4)'}}>Promedio Flota</p>
-            <p className="font-data text-4xl text-white leading-none">{fmtN(fleetAvgKmL,2)}</p>
-            <p className="text-[10px] mt-1" style={{color:'rgba(255,255,255,.35)'}}>km por litro</p>
+            <p className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{color:'rgba(255,255,255,.4)'}}>Gasto en Combustible</p>
+            <p className="font-data text-3xl text-white leading-none">{fmt(totalSpent)}</p>
           </div>
         </div>
-        <div className="kpi-hero p-6 flex flex-col justify-between sm:col-span-1" style={{minHeight:160}}>
+        <div className="kpi-hero p-6 flex flex-col justify-between" style={{minHeight:150}}>
           <div className="relative flex items-center justify-between mb-3">
-            <div className="p-2 rounded-xl" style={{background:'rgba(124,58,237,.25)'}}><Gauge size={15} style={{color:'#c4b5fd'}} /></div>
-            <span className="text-[7px] font-bold uppercase tracking-widest px-2 py-1 rounded-full" style={{color:'#c4b5fd',background:'rgba(124,58,237,.18)'}}>Eficiencia</span>
+            <div className="p-2 rounded-xl" style={{background:'rgba(14,165,233,.25)'}}><Activity size={15} style={{color:'#7dd3fc'}} /></div>
           </div>
           <div className="relative">
-            <p className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{color:'rgba(255,255,255,.4)'}}>Costo por KM</p>
-            <p className="font-data text-4xl text-white leading-none">{fmt(costPerKm)}</p>
-            <p className="text-[10px] mt-1" style={{color:'rgba(255,255,255,.35)'}}>combustible / km</p>
+            <p className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{color:'rgba(255,255,255,.4)'}}>Litros Totales</p>
+            <p className="font-data text-3xl text-white leading-none">{totalLitros.toLocaleString('es-AR',{maximumFractionDigits:0})}</p>
+            <p className="text-[10px] mt-1" style={{color:'rgba(255,255,255,.35)'}}>litros cargados</p>
           </div>
         </div>
-        <div className="card p-6" style={{borderColor:desvioAlerts.length>0?'#fca5a5':'var(--mist)',background:desvioAlerts.length>0?'#fff5f5':'white'}}>
-          <div className="flex items-center gap-2 mb-3">
-            <div className="p-2 rounded-xl" style={{background:desvioAlerts.length>0?'#fee2e2':'var(--ice)'}}>
-              <AlertTriangle size={14} style={{color:desvioAlerts.length>0?'var(--danger)':'var(--oxford)'}} />
-            </div>
-            <p className="text-[8px] font-bold uppercase tracking-widest" style={{color:desvioAlerts.length>0?'var(--danger)':'var(--oxford)'}}>Desvíos &gt; 15%</p>
+        <div className="kpi-hero p-6 flex flex-col justify-between" style={{minHeight:150}}>
+          <div className="relative flex items-center justify-between mb-3">
+            <div className="p-2 rounded-xl" style={{background:'rgba(14,165,233,.25)'}}><DollarSign size={15} style={{color:'#7dd3fc'}} /></div>
           </div>
-          {desvioAlerts.length===0
-            ? <div className="flex items-center gap-2 mt-4"><CheckCircle2 size={20} style={{color:'var(--success)'}}/><p className="text-sm font-semibold" style={{color:'var(--success)'}}>Sin desvíos detectados</p></div>
-            : <div className="space-y-2 mt-2 max-h-24 overflow-y-auto">{desvioAlerts.map((t) => (
-                <div key={t.truckId} className="flex items-center justify-between">
-                  <span className="font-display font-bold text-xs uppercase" style={{color:'var(--navy)'}}>{t.patente}</span>
-                  <span className="badge-bad px-2 py-0.5 rounded-lg text-[9px] font-bold flex items-center gap-1"><TrendingDown size={9}/>{fmtN(t.desvio,1)}%</span>
-                </div>
-              ))}</div>
-          }
+          <div className="relative">
+            <p className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{color:'rgba(255,255,255,.4)'}}>Precio Promedio</p>
+            <p className="font-data text-3xl text-white leading-none">{fmt(avgPrice)}</p>
+            <p className="text-[10px] mt-1" style={{color:'rgba(255,255,255,.35)'}}>por litro (histórico)</p>
+          </div>
         </div>
       </div>
 
@@ -1169,62 +1075,43 @@ function EfficiencyPanel({effStats,trucks,fmt,fmtN}) {
         </div>
       )}
 
-      <div className="card overflow-hidden">
-        <div className="p-5 border-b" style={{borderColor:'var(--mist)',background:'var(--ice)'}}>
-          <h3 className="font-display font-black text-base uppercase tracking-tight" style={{color:'var(--navy)'}}>Análisis por Unidad</h3>
-          <p className="text-[10px] mt-0.5" style={{color:'var(--oxford)'}}>Rendimiento real calculado por tramo entre cargas</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px]">
-            <thead style={{background:'var(--ice)'}}>
-              <tr className="border-b" style={{borderColor:'var(--mist)'}}>
-                {['Unidad','Conductor','KM Recorridos','Litros Totales','Rendimiento Prom.','Última Carga','Tendencia'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-[8px] font-bold uppercase tracking-wider" style={{color:'var(--oxford)'}}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y" style={{borderColor:'var(--mist)'}}>
-              {truckEfficiency.length===0 && <tr><td colSpan={7} className="px-4 py-10 text-center text-sm" style={{color:'var(--oxford)'}}>Sin datos de combustible con litros registrados</td></tr>}
-              {truckEfficiency.map((t) => {
-                const truck = trucks.find((tr) => tr.id===t.truckId)||{};
-                const tend  = t.desvio===null?null:t.desvio>0?'up':t.desvio<-5?'down':'flat';
-                return (
-                  <tr key={t.truckId} className="history-row transition-colors">
+      {byTruck.length>0 && (
+        <div className="card overflow-hidden">
+          <div className="p-5 border-b" style={{borderColor:'var(--mist)',background:'var(--ice)'}}>
+            <h3 className="font-display font-black text-base uppercase tracking-tight" style={{color:'var(--navy)'}}>Combustible por Unidad</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[500px]">
+              <thead style={{background:'var(--ice)'}}>
+                <tr className="border-b" style={{borderColor:'var(--mist)'}}>
+                  {['Unidad','Conductor','Cargas','Litros','Gasto Total','Precio Prom./L'].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-[8px] font-bold uppercase tracking-wider" style={{color:'var(--oxford)'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y" style={{borderColor:'var(--mist)'}}>
+                {byTruck.map(t => (
+                  <tr key={t.id} className="history-row transition-colors">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{background:'var(--ice)',border:'1px solid var(--mist)'}}>
-                          <span className="font-display font-black text-[9px]" style={{color:'var(--accent)'}}>{t.patente.slice(-3)}</span>
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{background:'#f0f9ff',border:'1px solid #bae6fd'}}>
+                          <span className="font-display font-black text-[9px]" style={{color:'var(--fuel)'}}>{t.patente.slice(-3)}</span>
                         </div>
                         <span className="font-display font-bold text-xs uppercase" style={{color:'var(--navy)'}}>{t.patente}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-xs" style={{color:'var(--oxford)'}}>{truck.chofer||'—'}</td>
-                    <td className="px-4 py-3"><span className="font-mono font-bold text-xs" style={{color:'var(--navy)'}}>{t.totalKm.toLocaleString('es-AR')} km</span></td>
-                    <td className="px-4 py-3"><span className="font-mono font-bold text-xs" style={{color:'var(--navy)'}}>{t.totalLitros.toLocaleString('es-AR',{maximumFractionDigits:1})} L</span></td>
-                    <td className="px-4 py-3">{kmLBadge(t.avgKmPL)}</td>
-                    <td className="px-4 py-3"><span className="font-mono text-[9px]" style={{color:'var(--oxford)'}}>{t.lastLoad?.date?.split(',')[0]||'—'}</span></td>
-                    <td className="px-4 py-3">
-                      {tend==='up'    && <span className="flex items-center gap-1 text-[9px] font-bold" style={{color:'var(--success)'}}><ArrowUp size={11}/>{fmtN(t.desvio,1)}%</span>}
-                      {tend==='down' && <span className="flex items-center gap-1 text-[9px] font-bold" style={{color:'var(--danger)'}}><ArrowDown size={11}/>{fmtN(Math.abs(t.desvio),1)}%</span>}
-                      {tend==='flat' && <span className="flex items-center gap-1 text-[9px]" style={{color:'var(--oxford)'}}><Minus size={11}/>Estable</span>}
-                      {tend===null   && <span className="text-[9px]" style={{color:'var(--mist)'}}>—</span>}
-                    </td>
+                    <td className="px-4 py-3 text-xs" style={{color:'var(--oxford)'}}>{t.chofer||'—'}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-xs" style={{color:'var(--navy)'}}>{t.loads}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-xs" style={{color:'var(--navy)'}}>{t.litros.toLocaleString('es-AR',{maximumFractionDigits:0})} L</td>
+                    <td className="px-4 py-3 font-mono font-bold text-xs" style={{color:'var(--navy)'}}>{fmt(t.monto)}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-xs" style={{color:'var(--fuel)'}}>{fmt(t.avgPrice)}/L</td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
-
-      <div className="card p-4">
-        <p className="text-[9px] font-bold uppercase tracking-widest mb-3" style={{color:'var(--oxford)'}}>Referencia de Rendimiento</p>
-        <div className="flex flex-wrap gap-3">
-          {[{cls:'badge-good',label:'Óptimo ≥ 4 km/l'},{cls:'badge-warn',label:'Regular 3–4 km/l'},{cls:'badge-bad',label:'Deficiente < 3 km/l'}].map(b => (
-            <span key={b.label} className={`${b.cls} px-3 py-1.5 rounded-lg text-[9px] font-bold`}>{b.label}</span>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -1250,7 +1137,7 @@ function FlotaPanel({stats, setModals}) {
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
         {STATUS_FILTERS.map(f => {
-          const meta = STATUS_META[f.value];
+          const meta  = STATUS_META[f.value];
           const count = f.value ? stats.truckStats.filter((t)=>t.status===f.value).length : stats.truckStats.length;
           return (
             <button key={f.value} onClick={() => setStatusFilter(f.value)}
@@ -1366,32 +1253,11 @@ function TruckCard({truck, onDelete, onEdit}) {
           }
         </div>
       )}
-
-      <div className="mt-3 pt-3 border-t grid grid-cols-2 gap-2" style={{borderColor:'var(--ice)'}}>
-        <div className="flex items-center gap-1.5">
-          <Gauge size={11} style={{color:'var(--accent)'}}/>
-          <span className="text-[8px] font-bold uppercase" style={{color:'var(--oxford)'}}>{(truck.kmActual||0).toLocaleString()} KM</span>
-        </div>
-        {truck.kmProximoService>0 && (
-          <div className="text-right">
-            <p className="text-[7px] font-bold uppercase" style={{color:'var(--oxford)'}}>Próx. Service</p>
-            <p className="font-mono text-[9px] font-bold" style={{color: (truck.kmProximoService-truck.kmActual)<=500?'var(--danger)':(truck.kmProximoService-truck.kmActual)<=1000?'var(--warn)':'var(--navy)'}}>
-              {(truck.kmProximoService-truck.kmActual).toLocaleString('es-AR')} km
-            </p>
-          </div>
-        )}
-        {(!truck.kmProximoService||truck.kmProximoService===0) && truck.costoPorKm>0 && (
-          <div className="text-right">
-            <p className="text-[7px] font-bold uppercase" style={{color:'var(--oxford)'}}>Costo/KM</p>
-            <p className="font-mono text-[9px] font-bold" style={{color:'var(--navy)'}}>{fmt(truck.costoPorKm)}</p>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
 
-// ─── ALTA UNIDAD MODAL ──────────────────────────────
+// ─── ALTA UNIDAD MODAL ────────────────────────────────────────────────────────
 
 function AltaUnidadModal({initial={}, onSubmit, onClose}) {
   const isEdit = Boolean(initial.id);
@@ -1415,7 +1281,6 @@ function AltaUnidadModal({initial={}, onSubmit, onClose}) {
     if (!f.anio||Number(f.anio)<1980||Number(f.anio)>CURRENT_YEAR+1) e.anio=`Año entre 1980 y ${CURRENT_YEAR+1}`;
     if (!f.capacidadTanque||Number(f.capacidadTanque)<=0) e.capacidadTanque='Capacidad > 0';
     if (!f.chofer) e.chofer='Requerido';
-    if (f.kmProximoService&&Number(f.kmProximoService)>0&&Number(f.kmProximoService)<=Number(f.kmActual||0)) e.kmProximoService='Debe ser mayor al KM actual';
     return e;
   };
 
@@ -1429,8 +1294,6 @@ function AltaUnidadModal({initial={}, onSubmit, onClose}) {
       anio:            Number(fd.get('anio')),
       capacidadTanque: Number(fd.get('capacidadTanque')),
       chofer:          String(fd.get('chofer')||'').trim(),
-      kmActual:        Number(fd.get('kmActual'))||0,
-      kmProximoService:Number(fd.get('kmProximoService'))||0,
     };
     const errs = validate(fields);
     if (Object.keys(errs).length>0) { setErrors(errs); return; }
@@ -1440,7 +1303,6 @@ function AltaUnidadModal({initial={}, onSubmit, onClose}) {
       await onSubmit({
         ...fields,
         tipoFuel, status,
-        kmInicio: isEdit?(initial.kmInicio||0):fields.kmActual,
         habMunicipal: Number(fd.get('habMunicipal'))||0,
         seguro:      Number(fd.get('seguroMonto'))||0,
         vtv_costo:   Number(fd.get('vtvMonto'))||0,
@@ -1547,10 +1409,9 @@ function AltaUnidadModal({initial={}, onSubmit, onClose}) {
             </div>
           </div>
 
-          <SectionHead Icon={Fuel} title="Motor y Combustible" accent="#0ea5e9" />
+          <SectionHead Icon={Fuel} title="Tipo de Combustible" accent="#0ea5e9" />
 
           <div>
-            <label className="text-[8px] font-bold uppercase tracking-wider block mb-2" style={{color:'var(--oxford)'}}>Tipo de Combustible *</label>
             <div className="grid grid-cols-3 gap-2">
               {FUEL_OPTS.map(opt => (
                 <button key={opt.value} type="button" onClick={() => setTipoFuel(opt.value)}
@@ -1567,21 +1428,6 @@ function AltaUnidadModal({initial={}, onSubmit, onClose}) {
             <input name="capacidadTanque" type="number" step="1" placeholder="300" defaultValue={initial.capacidadTanque||''}
               className={`inp w-full p-3 text-sm${errors.capacidadTanque?' border-red-400':''}`} />
             <FieldErr msg={errors.capacidadTanque} />
-          </div>
-
-          <SectionHead Icon={Gauge} title="Odómetro y Service Preventivo" accent="#7c3aed" />
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>KM Actual</label>
-              <input name="kmActual" type="number" placeholder="0" defaultValue={initial.kmActual||''} className="inp w-full p-3 text-sm" />
-            </div>
-            <div>
-              <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>KM Próximo Service</label>
-              <input name="kmProximoService" type="number" placeholder="Ej: 220000" defaultValue={initial.kmProximoService||''} className={`inp w-full p-3 text-sm${errors.kmProximoService?' border-red-400':''}`} />
-              <FieldErr msg={errors.kmProximoService} />
-              <p className="text-[8px] mt-0.5" style={{color:'var(--oxford)'}}>Alerta crítica a {ALERT_THRESHOLDS.SERVICE_CRITICAL_KM} km</p>
-            </div>
           </div>
 
           <SectionHead Icon={Wrench} title="Costos Fijos" accent="var(--success)" />
@@ -1697,30 +1543,14 @@ function AltaUnidadModal({initial={}, onSubmit, onClose}) {
 
 // ─── EXPENSE MODAL ────────────────────────────────────────────────────────────
 
-function ExpenseModal({trucks, onSubmit, onClose, history}) {
+function ExpenseModal({trucks, onSubmit, onClose}) {
   const [tipoGasto,  setTipoGasto]  = useState('');
   const [mantOpen,   setMantOpen]   = useState(false);
   const [subCat,     setSubCat]     = useState('');
   const [variosDesc, setVariosDesc] = useState('');
-  const [selectedTruck, setSelectedTruck] = useState('');
-  const [kmError,    setKmError]    = useState('');
   const [ticketFile, setTicketFile] = useState(null);
 
-  const lastKm = useMemo(() => {
-    if (!selectedTruck) return 0;
-    const loads = history
-      .filter((h) => h.truckId===selectedTruck && isFuel(h.categoryLabel) && (h.km_registro||0)>0 && h.status!=='baja')
-      .sort((a,b) => b.timestamp-a.timestamp);
-    return loads[0]?.km_registro || trucks.find((t)=>t.id===selectedTruck)?.kmActual || 0;
-  }, [selectedTruck, history, trucks]);
-
-  const validateKm = (val) => {
-    if (!val) { setKmError(''); return; }
-    if (parseFloat(val)<=lastKm) setKmError(`KM debe ser mayor al último registrado (${lastKm.toLocaleString('es-AR')} km)`);
-    else setKmError('');
-  };
-
-  const canSubmit = tipoGasto && (tipoGasto==='combustible'||(tipoGasto==='mantenimiento'&&subCat&&(subCat!=='varios'||variosDesc))) && !kmError;
+  const canSubmit = tipoGasto && (tipoGasto==='combustible'||(tipoGasto==='mantenimiento'&&subCat&&(subCat!=='varios'||variosDesc)));
 
   const OPCIONES=[
     {value:'mecanico',label:'🔧 Mecánico'},{value:'elastiquero',label:'🔩 Elastiquero'},
@@ -1742,8 +1572,7 @@ function ExpenseModal({trucks, onSubmit, onClose, history}) {
           Registrar <span style={{color:'var(--accent)'}}>Gasto</span>
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <select name="truckId" required className="inp w-full p-3.5 appearance-none"
-            value={selectedTruck} onChange={e => setSelectedTruck(e.target.value)}>
+          <select name="truckId" required className="inp w-full p-3.5 appearance-none">
             <option value="">Seleccione Unidad...</option>
             {trucks.map((t) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
           </select>
@@ -1794,21 +1623,9 @@ function ExpenseModal({trucks, onSubmit, onClose, history}) {
           {tipoGasto==='combustible' && (
             <div className="rounded-xl p-4 space-y-3 border" style={{background:'#f0f9ff',borderColor:'#bae6fd'}}>
               <p className="text-[8px] font-bold uppercase tracking-wider" style={{color:'var(--fuel)'}}>⛽ Datos de Carga</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[7px] font-bold uppercase tracking-wider mb-1 block" style={{color:'var(--oxford)'}}>Litros Cargados *</label>
-                  <input name="litros" type="number" step="0.01" required placeholder="0.00" className="inp w-full p-2.5 text-sm" />
-                </div>
-                <div>
-                  <label className="text-[7px] font-bold uppercase tracking-wider mb-1 block" style={{color:'var(--oxford)'}}>
-                    KM Odómetro * {lastKm>0&&<span style={{color:'var(--fuel)'}}>(&gt;{lastKm.toLocaleString()})</span>}
-                  </label>
-                  <input name="km_registro" type="number" required placeholder={lastKm>0?`> ${lastKm}`:'0'}
-                    className="inp w-full p-2.5 text-sm"
-                    style={kmError?{borderColor:'var(--danger)'}:{}}
-                    onChange={e => validateKm(e.target.value)} />
-                  {kmError&&<p className="text-[7px] mt-0.5 font-semibold" style={{color:'var(--danger)'}}>{kmError}</p>}
-                </div>
+              <div>
+                <label className="text-[7px] font-bold uppercase tracking-wider mb-1 block" style={{color:'var(--oxford)'}}>Litros Cargados *</label>
+                <input name="litros" type="number" step="0.01" required placeholder="0.00" className="inp w-full p-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-[7px] font-bold uppercase tracking-wider mb-1 block" style={{color:'var(--oxford)'}}>Foto del Ticket (recomendado)</label>
@@ -1938,7 +1755,7 @@ function HistoryTable({allPeriod,trucks,truckFilter,onTruckFilter,onBaja,onEdit,
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[560px]">
+        <table className="w-full min-w-[500px]">
           <thead className="border-b" style={{background:'var(--ice)',borderColor:'var(--mist)'}}>
             <tr>
               {['Fecha','Unidad','Concepto','Monto','Acciones'].map((h,i) => (
@@ -1963,7 +1780,7 @@ function HistoryTable({allPeriod,trucks,truckFilter,onTruckFilter,onBaja,onEdit,
                             {item.categoryLabel}
                           </span>
                           {isFuel(item.categoryLabel)&&(item.litros||0)>0 && (
-                            <span className="ml-1.5 text-[7px] font-mono font-bold" style={{color:'var(--fuel)'}}>{item.litros}L · {item.km_registro?.toLocaleString('es-AR')} km</span>
+                            <span className="ml-1.5 text-[7px] font-mono font-bold" style={{color:'var(--fuel)'}}>{item.litros}L</span>
                           )}
                           {editado&&<p className="text-[7px] font-bold mt-0.5 flex items-center gap-1" style={{color:'var(--accent)'}}><Edit2 size={7}/> {editado.editadoPor}{editado.motivo&&<span style={{color:'var(--oxford)'}}> — {editado.motivo}</span>}</p>}
                         </div>
@@ -1999,10 +1816,8 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}) {
   const [step,       setStep]       = useState('select');
   const [saving,      setSaving]     = useState(false);
   const [ticketFile, setTicketFile] = useState(null);
-  const [kmError,    setKmError]    = useState('');
 
   const handleFuel = async (e) => {
-    if (kmError) return;
     e.preventDefault(); setSaving(true);
     await onSubmit(e,{category:'combustible',fotoTicket:ticketFile});
     setSaving(false); setStep('done');
@@ -2011,7 +1826,7 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}) {
   const handleMaint = async (e) => {
     e.preventDefault(); setSaving(true);
     const fd = new FormData(e.currentTarget);
-    const subCat    = fd.get('subCat');
+    const subCat     = fd.get('subCat');
     const variosDesc = fd.get('variosDesc');
     await onSubmit(e,{category:subCat||'varios',variosDesc:subCat==='varios'?variosDesc:''});
     setSaving(false); setStep('done');
@@ -2022,7 +1837,7 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}) {
       <CheckCircle2 size={56} style={{color:'var(--success)'}} className="mb-4" />
       <h2 className="font-display font-black text-2xl uppercase" style={{color:'var(--navy)'}}>¡Registrado!</h2>
       <p className="text-sm mt-2 mb-8" style={{color:'var(--oxford)'}}>El gasto fue guardado correctamente.</p>
-      <button onClick={() => { setStep('select'); setTicketFile(null); setKmError(''); }}
+      <button onClick={() => { setStep('select'); setTicketFile(null); }}
         className="px-8 py-4 text-white rounded-2xl font-bold uppercase text-sm"
         style={{background:'linear-gradient(135deg,#1d4ed8,#2563eb)'}}>
         Nuevo Registro
@@ -2044,8 +1859,8 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}) {
         {step==='select' && (
           <div className="space-y-3 pt-2">
             {[
-              {key:'fuel',  emoji:'⛽', title:'Combustible',   sub:'Registrar carga con litros y KM', color:'#bae6fd', bg:'white'},
-              {key:'maint', emoji:'🔧', title:'Mantenimiento', sub:'Mecánico, gomas, varios...',       color:'var(--mist)', bg:'white'},
+              {key:'fuel',  emoji:'⛽', title:'Combustible',   sub:'Registrar carga con litros', color:'#bae6fd', bg:'white'},
+              {key:'maint', emoji:'🔧', title:'Mantenimiento', sub:'Mecánico, gomas, varios...', color:'var(--mist)', bg:'white'},
             ].map(item => (
               <button key={item.key} onClick={() => setStep(item.key)}
                 className="w-full flex items-center gap-4 p-5 rounded-2xl border-2 transition-all text-left"
@@ -2068,24 +1883,10 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}) {
               <option value="">Seleccioná tu camión...</option>
               {trucks.map((t) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
             </select>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="card p-4">
-                <p className="text-[8px] font-bold uppercase mb-2" style={{color:'var(--oxford)'}}>KM Odómetro *</p>
-                <input name="km_registro" type="number" inputMode="numeric" placeholder="0" required
-                  className="w-full font-data text-2xl font-black outline-none bg-transparent" style={{color:'var(--navy)'}}
-                  onChange={e => {
-                    const t = trucks.find((tr) => tr.id===(document.querySelector('[name=truckId]'))?.value);
-                    const last = t?.kmActual||0;
-                    if (parseFloat(e.target.value)<=last) setKmError(`Debe ser > ${last.toLocaleString()} km`);
-                    else setKmError('');
-                  }} />
-                {kmError&&<p className="text-[7px] mt-1 font-bold" style={{color:'var(--danger)'}}>{kmError}</p>}
-              </div>
-              <div className="card p-4">
-                <p className="text-[8px] font-bold uppercase mb-2" style={{color:'var(--oxford)'}}>Litros *</p>
-                <input name="litros" type="number" inputMode="decimal" step="0.01" placeholder="0.00" required
-                  className="w-full font-data text-2xl font-black outline-none bg-transparent" style={{color:'#0ea5e9'}} />
-              </div>
+            <div className="card p-4">
+              <p className="text-[8px] font-bold uppercase mb-2" style={{color:'var(--oxford)'}}>Litros *</p>
+              <input name="litros" type="number" inputMode="decimal" step="0.01" placeholder="0.00" required
+                className="w-full font-data text-2xl font-black outline-none bg-transparent" style={{color:'#0ea5e9'}} />
             </div>
             <div className="card p-5">
               <p className="text-[8px] font-bold uppercase mb-2" style={{color:'var(--oxford)'}}>Monto Total ($) *</p>
@@ -2108,7 +1909,7 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}) {
                   </label>
               }
             </div>
-            <button type="submit" disabled={saving||Boolean(kmError)}
+            <button type="submit" disabled={saving}
               className="w-full py-5 text-white rounded-2xl font-display font-black text-lg uppercase disabled:opacity-40"
               style={{background:'linear-gradient(135deg,#1d4ed8,#2563eb)',boxShadow:'0 10px 28px rgba(37,99,235,.4)'}}>
               {saving?<span className="flex items-center justify-center gap-2"><Loader2 size={18} className="animate-spin"/>Guardando...</span>:'Confirmar Carga'}
