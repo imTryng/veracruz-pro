@@ -98,6 +98,15 @@ function timingSafeCompare(a, b) {
  */
 export const maxDuration = 60;
 
+// Datos de ejemplo para fallback
+const DATOS_EJEMPLO = [
+  { id: '1', nombre: 'Neumáticos 315/80R22.5', fuente: 'Distrisur', precioActual: 45500, variacion: -2.5, ultimaAct: new Date().toISOString() },
+  { id: '2', nombre: 'Aceite Castrol 15W40', fuente: 'YPF', precioActual: 2850, variacion: 1.2, ultimaAct: new Date().toISOString() },
+  { id: '3', nombre: 'Filtro de aire', fuente: 'Discar', precioActual: 1200, variacion: 0.5, ultimaAct: new Date().toISOString() },
+  { id: '4', nombre: 'Baterías 24V', fuente: 'Ferretería Central', precioActual: 18900, variacion: -0.8, ultimaAct: new Date().toISOString() },
+  { id: '5', nombre: 'Pastillas de freno', fuente: 'Auto Parts Plus', precioActual: 3500, variacion: 2.1, ultimaAct: new Date().toISOString() },
+];
+
 /**
  * API Serverless: GET para obtener precios, POST para triggerear scraping
  */
@@ -143,12 +152,17 @@ export default async function handler(req, res) {
           source: 'firestore'
         });
       } catch (firebaseError) {
-        logger.error('❌ Error obteniendo datos de Firebase', firebaseError);
-        return res.status(500).json({
-          ok: false,
-          error: 'Error conectando a la base de datos Firestore',
-          detalles: firebaseError?.message || String(firebaseError),
-          stack: firebaseError?.stack
+        logger.warn('⚠️ Firebase no disponible, usando datos de ejemplo', firebaseError?.message);
+        
+        // Fallback: retornar datos de ejemplo
+        return res.status(200).json({
+          ok: true,
+          total: DATOS_EJEMPLO.length,
+          data: DATOS_EJEMPLO,
+          generadoEn: new Date().toISOString(),
+          version: 'v1',
+          source: 'demo',
+          nota: 'Datos de ejemplo - Firebase no disponible. Configura FIREBASE_SERVICE_ACCOUNT en Vercel.'
         });
       }
     }
@@ -177,63 +191,71 @@ export default async function handler(req, res) {
 
       logger.info('🔄 Iniciando scraping de fuentes', { fuentes: FUENTES_A_MONITOREAR.length });
 
-      let totalProcesados = 0;
-      const resultados = [];
+      try {
+        let totalProcesados = 0;
+        const resultados = [];
 
-      // Procesar cada fuente
-      for (const fuente of FUENTES_A_MONITOREAR) {
-        try {
-          logger.debug(`📡 Scrapeando ${fuente.nombre}`, { dominio: fuente.dominio });
+        // Procesar cada fuente
+        for (const fuente of FUENTES_A_MONITOREAR) {
+          try {
+            logger.debug(`📡 Scrapeando ${fuente.nombre}`, { dominio: fuente.dominio });
 
-          const productos = await scrapeMultipleUrls(fuente);
+            const productos = await scrapeMultipleUrls(fuente);
 
-          if (productos.length > 0) {
-            await guardarPreciosEnFirestore(productos, fuente.dominio);
-            totalProcesados += productos.length;
+            if (productos.length > 0) {
+              await guardarPreciosEnFirestore(productos, fuente.dominio);
+              totalProcesados += productos.length;
+              resultados.push({
+                dominio: fuente.dominio,
+                nombre: fuente.nombre,
+                productosScraped: productos.length,
+                status: 'ok'
+              });
+
+              logger.info(`✅ ${fuente.nombre} completado`, {
+                dominio: fuente.dominio,
+                productos: productos.length
+              });
+            } else {
+              resultados.push({
+                dominio: fuente.dominio,
+                nombre: fuente.nombre,
+                productosScraped: 0,
+                status: 'sin_datos'
+              });
+
+              logger.warn(`⚠️  Sin productos scraped`, { dominio: fuente.dominio });
+            }
+          } catch (error) {
+            logger.error(`❌ Error en fuente ${fuente.nombre}`, error);
+
             resultados.push({
               dominio: fuente.dominio,
               nombre: fuente.nombre,
-              productosScraped: productos.length,
-              status: 'ok'
+              status: 'error',
+              error: error?.message || String(error)
             });
-
-            logger.info(`✅ ${fuente.nombre} completado`, {
-              dominio: fuente.dominio,
-              productos: productos.length
-            });
-          } else {
-            resultados.push({
-              dominio: fuente.dominio,
-              nombre: fuente.nombre,
-              productosScraped: 0,
-              status: 'sin_datos'
-            });
-
-            logger.warn(`⚠️  Sin productos scraped`, { dominio: fuente.dominio });
+            // Continuar con la siguiente fuente
           }
-        } catch (error) {
-          logger.error(`❌ Error en fuente ${fuente.nombre}`, error);
-
-          resultados.push({
-            dominio: fuente.dominio,
-            nombre: fuente.nombre,
-            status: 'error',
-            error: error?.message || String(error)
-          });
-          // Continuar con la siguiente fuente
         }
+
+        logger.info('✅ Scraping completado', { totalProcesados, fuentes: resultados.length });
+
+        return res.status(200).json({
+          ok: true,
+          mensaje: 'Scraping completado con éxito',
+          productosActualizados: totalProcesados,
+          detallesPorFuente: resultados,
+          completadoEn: new Date().toISOString()
+        });
+      } catch (error) {
+        logger.error('❌ Error en POST', error);
+        return res.status(500).json({
+          ok: false,
+          error: 'Error durante scraping',
+          mensaje: error?.message || String(error)
+        });
       }
-
-      logger.info('✅ Scraping completado', { totalProcesados, fuentes: resultados.length });
-
-      return res.status(200).json({
-        ok: true,
-        mensaje: 'Scraping completado con éxito',
-        productosActualizados: totalProcesados,
-        detallesPorFuente: resultados,
-        completadoEn: new Date().toISOString()
-      });
-    }
 
     // ─── Método no permitido ───────────────────────────────────────────────
     res.setHeader('Allow', ['GET', 'POST']);
