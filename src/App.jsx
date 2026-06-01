@@ -2489,9 +2489,9 @@ function ComparadorPreciosPanel({ fmt }) {
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">No se encontraron productos.</td></tr>
               ) : filtered.map((p, i) => {
-                const diff = (p.precio || 0) - (p.precioAnterior || p.precio || 0);
-                const hasAumento = diff > 0;
-                const hasBaja = diff < 0;
+                const variacion = Number(p.variacion) || 0;
+                const hasAumento = variacion > 0;
+                const hasBaja = variacion < 0;
                 
                 return (
                   <tr key={p.id || i} className="transition-colors hover:bg-[#0b0f19]">
@@ -2502,19 +2502,19 @@ function ComparadorPreciosPanel({ fmt }) {
                       <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg bg-blue-500/10 text-sky-400">{p.fuente || 'Desconocido'}</span>
                     </td>
                     <td className="px-4 py-3 font-mono font-bold text-[13px] text-white">
-                      {fmt(p.precio)}
+                      {fmt(Number(p.precioActual) || 0)}
                     </td>
                     <td className="px-4 py-3">
                       {hasAumento ? (
-                        <span className="flex items-center gap-1 text-[10px] font-bold text-red-400"><TrendingUp size={12}/> +{fmt(diff)}</span>
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-red-400"><TrendingUp size={12}/> +{variacion.toFixed(2)}%</span>
                       ) : hasBaja ? (
-                        <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400"><TrendingDown size={12}/> {fmt(diff)}</span>
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400"><TrendingDown size={12}/> {variacion.toFixed(2)}%</span>
                       ) : (
                         <span className="text-[10px] font-bold text-slate-500">Sin cambios</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-[10px] text-slate-400">
-                      {p.fechaActualizacion ? new Date(p.fechaActualizacion).toLocaleString('es-AR') : '-'}
+                      {p.ultimaAct ? new Date(p.ultimaAct).toLocaleString('es-AR') : '-'}
                     </td>
                   </tr>
                 );
