@@ -2405,12 +2405,13 @@ function LoginComponent({onLogin}) {
 function ComparadorPreciosPanel({ fmt }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actualizando, setActualizando] = useState(false);
   const [search, setSearch] = useState('');
+  const [ultimaAct, setUltimaAct] = useState(null);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Intentamos llamar a la API utilizando ruta relativa (funciona en Vercel)
       console.log('Realizando petición a /api/scraper-precios ...');
       const res = await fetch('/api/scraper-precios');
       
@@ -2418,6 +2419,7 @@ function ComparadorPreciosPanel({ fmt }) {
         const json = await res.json();
         console.log('Respuesta OK de API:', json);
         setData(json.data || []);
+        setUltimaAct(new Date());
       } else {
         const errorText = await res.text();
         console.error(`Error HTTP ${res.status}:`, errorText);
@@ -2429,6 +2431,32 @@ function ComparadorPreciosPanel({ fmt }) {
       alert(`Error de red al conectar con la API: ${e.message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const actualizarAhora = async () => {
+    setActualizando(true);
+    try {
+      console.log('🔄 Actualizando precios ahora...');
+      const res = await fetch('/api/actualizar-precios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (res.ok) {
+        const json = await res.json();
+        console.log('Precios actualizados:', json);
+        setData(json.data || []);
+        setUltimaAct(new Date());
+        alert('✅ Precios actualizados correctamente');
+      } else {
+        alert('❌ Error al actualizar precios');
+      }
+    } catch (e) {
+      console.error('Error actualizando:', e);
+      alert(`❌ Error: ${e.message}`);
+    } finally {
+      setActualizando(false);
     }
   };
 
@@ -2449,12 +2477,23 @@ function ComparadorPreciosPanel({ fmt }) {
           <h2 className="font-display font-black text-3xl uppercase tracking-tight text-white">
             Comparador de <span className="text-blue-500">Precios</span>
           </h2>
-          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">{data.length} productos monitoreados</p>
+          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">{data.length} productos monitoreados {ultimaAct && `• Actualizado: ${ultimaAct.toLocaleTimeString('es-AR')}`}</p>
         </div>
-        <button onClick={fetchData}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs uppercase transition-all bg-[#131c2e] border border-slate-800/60 text-blue-400 hover:bg-slate-800">
-          <RotateCcw size={13}/> Actualizar
-        </button>
+        <div className="flex gap-2">
+          <button onClick={actualizarAhora} disabled={actualizando}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs uppercase transition-all ${
+              actualizando 
+                ? 'bg-slate-700 text-slate-400 cursor-not-allowed' 
+                : 'bg-green-500/20 border border-green-500/50 text-green-400 hover:bg-green-500/30'
+            }`}>
+            {actualizando ? <Loader2 size={13} className="animate-spin"/> : <Zap size={13}/>}
+            {actualizando ? 'Actualizando...' : 'Actualizar Ahora'}
+          </button>
+          <button onClick={fetchData}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs uppercase transition-all bg-[#131c2e] border border-slate-800/60 text-blue-400 hover:bg-slate-800">
+            <RotateCcw size={13}/> Recargar
+          </button>
+        </div>
       </div>
 
       <div className="bg-[#131c2e] border border-slate-800/60 rounded-2xl p-4">
