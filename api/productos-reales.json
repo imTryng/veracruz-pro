@@ -1,0 +1,86 @@
+{
+  "timestamp": "2026-06-01T01:35:00.000Z",
+  "productos": [
+    {
+      "id": "1",
+      "nombre": "Neumáticos 315/80R22.5 - TBR",
+      "fuente": "Distri Sur Online",
+      "precioActual": 45500,
+      "variacion": 0,
+      "ultimaAct": "2026-06-01T01:35:00.000Z"
+    },
+    {
+      "id": "2",
+      "nombre": "Aceite Castrol 15W40 GTX",
+      "fuente": "Distribuidora Veracruz",
+      "precioActual": 2850,
+      "variacion": 0,
+      "ultimaAct": "2026-06-01T01:35:00.000Z"
+    },
+    {
+      "id": "3",
+      "nombre": "Filtro de aire Fleetguard",
+      "fuente": "Distri Sur Online",
+      "precioActual": 1200,
+      "variacion": 0,
+      "ultimaAct": "2026-06-01T01:35:00.000Z"
+    },
+    {
+      "id": "4",
+      "nombre": "Baterías 24V 140Ah",
+      "fuente": "Distribuidora Veracruz",
+      "precioActual": 18900,
+      "variacion": 0,
+      "ultimaAct": "2026-06-01T01:35:00.000Z"
+    },
+    {
+      "id": "5",
+      "nombre": "Pastillas de freno Fremax",
+      "fuente": "Distri Sur Online",
+      "precioActual": 3500,
+      "variacion": 0,
+      "ultimaAct": "2026-06-01T01:35:00.000Z"
+    },
+    {
+      "id": "6",
+      "nombre": "Correa de distribución MBQ",
+      "fuente": "Distribuidora Veracruz",
+      "precioActual": 8900,
+      "variacion": 0,
+      "ultimaAct": "2026-06-01T01:35:00.000Z"
+    },
+    {
+      "id": "7",
+      "nombre": "Gasolina Súper 95 - por litro",
+      "fuente": "Distri Sur Online",
+      "precioActual": 285.50,
+      "variacion": 0,
+      "ultimaAct": "2026-06-01T01:35:00.000Z"
+    },
+    {
+      "id": "8",
+      "nombre": "Bulones M12x1.5 DIN 6921",
+      "fuente": "Distribuidora Veracruz",
+      "precioActual": 120,
+      "variacion": 0,
+      "ultimaAct": "2026-06-01T01:35:00.000Z"
+    },
+    {
+      "id": "9",
+      "nombre": "Bujes de goma para ejes",
+      "fuente": "Distri Sur Online",
+      "precioActual": 650,
+      "variacion": 0,
+      "ultimaAct": "2026-06-01T01:35:00.000Z"
+    },
+    {
+      "id": "10",
+      "nombre": "Mangueras de radiador",
+      "fuente": "Distribuidora Veracruz",
+      "precioActual": 450,
+      "variacion": 0,
+      "ultimaAct": "2026-06-01T01:35:00.000Z"
+    }
+  ],
+  "instrucciones": "EDITAR ESTE ARCHIVO CON DATOS REALES:\n1. Obtén productos de: https://www.distrisuronline.com/ y https://distribuidoraveracruz.tiendapropio.com/\n2. Copia el nombre EXACTO del producto\n3. Copia el PRECIO ACTUAL de cada producto\n4. Asegúrate que 'fuente' sea 'Distri Sur Online' o 'Distribuidora Veracruz'\n5. Guarda este archivo\n6. git add + commit + push\n7. ¡Los datos actualizados aparecerán automáticamente!\n"
+}
