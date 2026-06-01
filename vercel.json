@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/scraper-precios",
+      "schedule": "0 9 * * *"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist"
+}
