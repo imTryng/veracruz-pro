@@ -587,6 +587,7 @@ export default function App() {
     {id:'history',   label:'Gastos'},
     {id:'fuel',      label:'Combustible'},
     {id:'vendedores',label:'Vendedores'},
+    {id:'comparador',label:'Comparador de Precios'},
   ];
 
   return (
@@ -610,10 +611,10 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex bg-[#131c2e] border border-slate-800/60 p-1 rounded-2xl order-last md:order-none w-full md:w-auto justify-start md:justify-center gap-0.5 overflow-x-auto hide-scrollbar">
+          <div className="flex bg-[#131c2e] border border-slate-800/60 p-1 rounded-2xl order-last md:order-none w-full md:w-auto justify-start md:justify-center gap-0.5 overflow-x-auto hide-scrollbar flex-wrap md:flex-nowrap">
             {TABS.map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 rounded-xl flex-1 md:flex-none text-[11px] font-display font-bold uppercase tracking-wider transition-all whitespace-nowrap ${activeTab===tab.id ? 'bg-blue-600/20 text-blue-400' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}>
+                className={`px-4 py-2 rounded-xl flex-shrink-0 text-[11px] font-display font-bold uppercase tracking-wider transition-all whitespace-nowrap ${activeTab===tab.id ? 'bg-blue-600/20 text-blue-400' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}>
                 {tab.label}
                 {tab.id==='dashboard' && fleetAlerts.filter(a=>a.severity==='critical').length>0 && (
                   <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-[7px] font-black text-white bg-red-500">
@@ -686,6 +687,7 @@ export default function App() {
           {activeTab==='history'   && <HistoryTable   allPeriod={stats.allPeriod} trucks={trucks} truckFilter={historyTruckFilter} onTruckFilter={setHistoryTruckFilter} onBaja={handleBajaExpense} onEdit={item => setModals(m => ({...m,editExpense:item}))} fmt={fmt} onExport={handleExportExcel} />}
           {activeTab==='fuel'      && <FuelPanel priceEvolution={priceEvolution} history={history} trucks={trucks} fmt={fmt} fmtN={fmtN} />}
           {activeTab==='vendedores'&& <AvanceVendedoresPanel vendedoresData={vendedoresData} loading={vendedoresLoading} onRefresh={fetchExcelData} fmt={fmt} />}
+          {activeTab==='comparador'&& <ComparadorPreciosPanel fmt={fmt} />}
         </main>
 
         {/* FAB */}
@@ -2392,6 +2394,133 @@ function LoginComponent({onLogin}) {
           <p className="text-center text-[8px] font-bold uppercase tracking-widest" style={{color:'rgba(255,255,255,.13)'}}>
             Distribuidora Veracruz S.A. · Sistema Interno
           </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── COMPARADOR PRECIOS PANEL ──────────────────────────────────────────────────
+
+function ComparadorPreciosPanel({ fmt }) {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // Intentamos llamar a la API utilizando ruta relativa (funciona en Vercel)
+      console.log('Realizando petición a /api/scraper-precios ...');
+      const res = await fetch('/api/scraper-precios');
+      
+      if (res.ok) {
+        const json = await res.json();
+        console.log('Respuesta OK de API:', json);
+        setData(json.data || []);
+      } else {
+        const errorText = await res.text();
+        console.error(`Error HTTP ${res.status}:`, errorText);
+        alert(`Error al cargar datos (HTTP ${res.status}). Revisar consola.`);
+        setData([]);
+      }
+    } catch (e) {
+      console.error('Error de red al llamar a la API:', e);
+      alert(`Error de red al conectar con la API: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const filtered = data.filter(p => 
+    p.nombre?.toLowerCase().includes(search.toLowerCase()) || 
+    p.fuente?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-6 cb-anim pb-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">Scraping & Monitoreo</p>
+          <h2 className="font-display font-black text-3xl uppercase tracking-tight text-white">
+            Comparador de <span className="text-blue-500">Precios</span>
+          </h2>
+          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mt-1">{data.length} productos monitoreados</p>
+        </div>
+        <button onClick={fetchData}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs uppercase transition-all bg-[#131c2e] border border-slate-800/60 text-blue-400 hover:bg-slate-800">
+          <RotateCcw size={13}/> Actualizar
+        </button>
+      </div>
+
+      <div className="bg-[#131c2e] border border-slate-800/60 rounded-2xl p-4">
+        <div className="relative w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
+          <input
+            type="text"
+            placeholder="Buscar producto por nombre o marca..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm font-medium outline-none transition-all bg-[#0b0f19] border border-slate-800 text-white placeholder-slate-500 focus:border-blue-500"
+          />
+        </div>
+      </div>
+
+      <div className="bg-[#131c2e] border border-slate-800/60 rounded-2xl overflow-hidden">
+        <div className="p-4 border-b border-slate-800 bg-[#0f172a]">
+          <p className="font-display font-black text-base uppercase text-white">Lista de Precios</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px]">
+            <thead className="bg-[#0f172a] border-b border-slate-800">
+              <tr>
+                {['Producto', 'Fuente', 'Precio Actual', 'Variación', 'Última Act.'].map(h => (
+                  <th key={h} className="px-4 py-3 text-left text-[8px] font-bold uppercase tracking-wider text-slate-400">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/50">
+              {loading ? (
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400"><Loader2 className="animate-spin mx-auto mb-2" /> Cargando datos...</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">No se encontraron productos.</td></tr>
+              ) : filtered.map((p, i) => {
+                const diff = (p.precio || 0) - (p.precioAnterior || p.precio || 0);
+                const hasAumento = diff > 0;
+                const hasBaja = diff < 0;
+                
+                return (
+                  <tr key={p.id || i} className="transition-colors hover:bg-[#0b0f19]">
+                    <td className="px-4 py-3">
+                      <p className="font-bold text-xs text-white">{p.nombre}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-[8px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg bg-blue-500/10 text-sky-400">{p.fuente || 'Desconocido'}</span>
+                    </td>
+                    <td className="px-4 py-3 font-mono font-bold text-[13px] text-white">
+                      {fmt(p.precio)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {hasAumento ? (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-red-400"><TrendingUp size={12}/> +{fmt(diff)}</span>
+                      ) : hasBaja ? (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400"><TrendingDown size={12}/> {fmt(diff)}</span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-slate-500">Sin cambios</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-[10px] text-slate-400">
+                      {p.fechaActualizacion ? new Date(p.fechaActualizacion).toLocaleString('es-AR') : '-'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
