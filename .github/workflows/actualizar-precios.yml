@@ -1,0 +1,45 @@
+name: Actualizar Precios Diariamente
+
+on:
+  schedule:
+    # Ejecutar cada día a las 9 AM (UTC-3 sería 6 AM UTC, pero GitHub usa UTC)
+    # Entonces para 9 AM Argentina (UTC-3), debo poner 12:00 UTC
+    - cron: '0 12 * * *'
+  # Permite ejecutar manualmente desde GitHub
+  workflow_dispatch:
+
+jobs:
+  actualizar-precios:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: 📚 Instalar dependencias
+        run: npm install axios cheerio
+
+      - name: 🔄 Actualizar precios
+        run: node scripts/actualizar-precios.js
+
+      - name: 📤 Commit y Push
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Verificar si hubo cambios
+          if git diff --quiet api/productos-reales.json; then
+            echo "✓ No hay cambios en los precios"
+          else
+            echo "📊 Cambios detectados, haciendo commit..."
+            git add api/productos-reales.json
+            git commit -m "🔄 Actualización automática de precios - $(date +'%Y-%m-%d %H:%M:%S')"
+            git push
+          fi
