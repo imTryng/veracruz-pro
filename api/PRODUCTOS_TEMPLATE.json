@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-06-01T01:30:00.000Z",
+  "total": 0,
+  "productos": [
+    {
+      "id": "1",
+      "nombre": "EDITAR: Nombre del producto aquí",
+      "fuente": "Distri Sur Online o Distribuidora Veracruz",
+      "precioActual": 0,
+      "variacion": 0,
+      "ultimaAct": "2026-06-01T01:30:00.000Z"
+    }
+  ],
+  "instrucciones": "1. Edita cada producto con datos REALES de https://www.distrisuronline.com y https://distribuidoraveracruz.tiendapropio.com\n2. Guarda el archivo\n3. Haz git add + commit + push\n4. Vercel redeploy automático\n5. Los datos aparecerán en el Comparador de Precios"
+}

@@ -1,0 +1,79 @@
+{
+  "timestamp": "2026-06-01T01:32:56.304Z",
+  "total": 9,
+  "productos": [
+    {
+      "id": "1",
+      "nombre": "Neumáticos 315/80R22.5",
+      "fuente": "Distri Sur Online",
+      "precioActual": 45500,
+      "variacion": -2.5,
+      "ultimaAct": "2026-06-01T01:32:56.303Z"
+    },
+    {
+      "id": "2",
+      "nombre": "Aceite Castrol 15W40",
+      "fuente": "Distribuidora Veracruz",
+      "precioActual": 2850,
+      "variacion": 1.2,
+      "ultimaAct": "2026-06-01T01:32:56.303Z"
+    },
+    {
+      "id": "3",
+      "nombre": "Filtro de aire",
+      "fuente": "Distri Sur Online",
+      "precioActual": 1200,
+      "variacion": 0.5,
+      "ultimaAct": "2026-06-01T01:32:56.303Z"
+    },
+    {
+      "id": "4",
+      "nombre": "Baterías 24V",
+      "fuente": "Distribuidora Veracruz",
+      "precioActual": 18900,
+      "variacion": -0.8,
+      "ultimaAct": "2026-06-01T01:32:56.304Z"
+    },
+    {
+      "id": "5",
+      "nombre": "Pastillas de freno",
+      "fuente": "Distri Sur Online",
+      "precioActual": 3500,
+      "variacion": 2.1,
+      "ultimaAct": "2026-06-01T01:32:56.304Z"
+    },
+    {
+      "id": "6",
+      "nombre": "Correa de distribución",
+      "fuente": "Distribuidora Veracruz",
+      "precioActual": 8900,
+      "variacion": -1.3,
+      "ultimaAct": "2026-06-01T01:32:56.304Z"
+    },
+    {
+      "id": "7",
+      "nombre": "Gasolina Súper",
+      "fuente": "Distri Sur Online",
+      "precioActual": 285.5,
+      "variacion": 3.2,
+      "ultimaAct": "2026-06-01T01:32:56.304Z"
+    },
+    {
+      "id": "8",
+      "nombre": "Bulones",
+      "fuente": "Distribuidora Veracruz",
+      "precioActual": 120,
+      "variacion": 0,
+      "ultimaAct": "2026-06-01T01:32:56.304Z"
+    },
+    {
+      "id": "9",
+      "nombre": "Bujes de goma",
+      "fuente": "Distri Sur Online",
+      "precioActual": 650,
+      "variacion": -0.5,
+      "ultimaAct": "2026-06-01T01:32:56.304Z"
+    }
+  ],
+  "esReal": true
+}

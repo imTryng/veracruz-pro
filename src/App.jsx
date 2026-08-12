@@ -24,6 +24,7 @@ import {
   getAuth, onAuthStateChanged, signOut,
   createUserWithEmailAndPassword, signInWithEmailAndPassword
 } from 'firebase/auth';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAAtd98TuFph3d16lKXGIh_3vmJwwxesKk",
@@ -38,6 +39,7 @@ const firebaseConfig = {
 const app  = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db   = getFirestore(app);
+const storage = getStorage(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'veracruz-fleet-pro-v2';
 
 // ─── Constants & Enums ────────────────────────────────────────────────────────
@@ -69,6 +71,17 @@ function daysUntil(dateStr, today = TODAY) {
 }
 
 function isFuel(label) { return (label || '').toLowerCase().startsWith('combustible'); }
+
+function getLocalDateISO(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getExpenseTimestamp(dateStr) {
+  return new Date(`${dateStr}T12:00:00`).getTime();
+}
 
 // ─── Alert engine (pure) ──────────────────────────────────────────────────────
 
@@ -446,10 +459,25 @@ export default function App() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────────
 
+  const uploadAttachment = async (file, folder) => {
+    if (!file) return null;
+    const fileRef = ref(storage, `${folder}/${user.uid}/${Date.now()}-${file.name}`);
+    await uploadBytes(fileRef, file);
+    return getDownloadURL(fileRef);
+  };
+
   const handleAddTruck = async (data) => {
     try {
+      const {seguroFile, vtvFile, ...truckData} = data;
+      const [seguroUrl, vtvUrl] = await Promise.all([
+        uploadAttachment(seguroFile, 'documentacion/seguros'),
+        uploadAttachment(vtvFile, 'documentacion/vtv'),
+      ]);
       await addDoc(collection(db,'artifacts',appId,'public','data','trucks'), {
-        ...data, timestamp:Date.now(),
+        ...truckData,
+        ...(seguroUrl && {seguro_adjunto:seguroUrl}),
+        ...(vtvUrl && {vtv_adjunto:vtvUrl}),
+        timestamp:Date.now(),
       });
       setModals(p => ({...p,truck:false})); showNotif("Unidad registrada");
     } catch { showNotif("Error al guardar","error"); }
@@ -470,29 +498,53 @@ export default function App() {
     const truckId  = fd.get('truckId');
     const truck    = trucks.find(t => t.id===truckId);
     const amount   = parseFloat(fd.get('amount'));
+    const expenseDate = fd.get('expenseDate') || getLocalDateISO();
     const category = extra.category || 'varios';
     const label    = category==='varios'&&extra.variosDesc
       ? `VARIOS - ${extra.variosDesc.toUpperCase()}`
       : category.toUpperCase();
-    const litros   = parseFloat(fd.get('litros'))||0;
+    const litrosValue = fd.get('litros');
+    const litros   = litrosValue ? parseFloat(String(litrosValue).replace(',', '.')) : 0;
     const precio_por_litro = litros>0 ? amount/litros : 0;
+    if (!truck || !Number.isFinite(amount) || amount <= 0 || !expenseDate || expenseDate > getLocalDateISO()) {
+      showNotif("Complete los datos del gasto","error");
+      return false;
+    }
+    const duplicate = history.some(h =>
+      h.status !== 'baja' && h.truckId === truckId && h.expenseDate === expenseDate && Number(h.amount) === amount
+    );
+    if (duplicate) {
+      showNotif("Posible gasto duplicado: misma unidad, fecha y monto","error");
+      return false;
+    }
+    if (isFuel(label) && (!Number.isFinite(litros) || litros <= 0 || litros > 99999.999 || !/^\d+(?:[.,]\d{1,3})?$/.test(String(litrosValue)))) {
+      showNotif("Ingrese litros válidos (hasta 3 decimales)","error");
+      return false;
+    }
     try {
+      const ticketUrl = await uploadAttachment(extra.fotoTicket, 'comprobantes/tickets');
       await addDoc(collection(db,'artifacts',appId,'public','data','history'), {
         truckId, truck:truck.patente, categoryLabel:label, amount,
-        responsible:user.email, status:'active', timestamp:Date.now(),
-        date:new Date().toLocaleString('es-AR'), historialEdiciones:[],
+        responsible:user.email, status:'active', timestamp:getExpenseTimestamp(expenseDate),
+        expenseDate, date:new Date(`${expenseDate}T12:00:00`).toLocaleDateString('es-AR'), historialEdiciones:[],
+        ...(ticketUrl && {ticket_adjunto:ticketUrl}),
         ...(isFuel(label)&&litros>0&&{litros,precio_por_litro}),
       });
       setModals(p => ({...p,expense:false})); showNotif("Gasto registrado");
-    } catch { showNotif("Error al registrar","error"); }
+      return true;
+    } catch { showNotif("Error al registrar","error"); return false; }
   };
 
-  const handleEditExpense = async (item, newAmount, motivo) => {
+  const handleEditExpense = async (item, newAmount, motivo, newDate) => {
     if (!newAmount||isNaN(Number(newAmount))) return showNotif("Monto inválido","error");
-    const edicion = {montoAnterior:item.amount,montoNuevo:parseFloat(newAmount),editadoPor:user.email,editadoAt:Date.now(),fecha:new Date().toLocaleString('es-AR'),motivo:motivo||''};
+    if (!newDate || newDate > getLocalDateISO()) return showNotif("Fecha inválida","error");
+    const edicion = {montoAnterior:item.amount,montoNuevo:parseFloat(newAmount),fechaAnterior:item.expenseDate,fechaNueva:newDate,editadoPor:user.email,editadoAt:Date.now(),fecha:new Date().toLocaleString('es-AR'),motivo:motivo||''};
     try {
       await updateDoc(doc(db,'artifacts',appId,'public','data','history',item.id), {
         amount:parseFloat(newAmount),
+        expenseDate:newDate,
+        date:new Date(`${newDate}T12:00:00`).toLocaleDateString('es-AR'),
+        timestamp:getExpenseTimestamp(newDate),
         historialEdiciones:[...(item.historialEdiciones||[]),edicion],
         ultimaEdicion:edicion,
       });
@@ -684,7 +736,7 @@ export default function App() {
 
           {activeTab==='dashboard' && <DashboardPanel stats={stats} trucks={trucks} fmt={fmt} />}
           {activeTab==='units'     && <FlotaPanel     stats={stats} setModals={setModals} />}
-          {activeTab==='history'   && <HistoryTable   allPeriod={stats.allPeriod} trucks={trucks} truckFilter={historyTruckFilter} onTruckFilter={setHistoryTruckFilter} onBaja={handleBajaExpense} onEdit={item => setModals(m => ({...m,editExpense:item}))} fmt={fmt} onExport={handleExportExcel} />}
+          {activeTab==='history'   && <HistoryTable   allPeriod={stats.allPeriod} trucks={trucks} truckFilter={historyTruckFilter} onTruckFilter={setHistoryTruckFilter} onBaja={handleBajaExpense} onEdit={item => setModals(m => ({...m,editExpense:item}))} canManage={userRole===ROLES.ADMIN} fmt={fmt} onExport={handleExportExcel} />}
           {activeTab==='fuel'      && <FuelPanel priceEvolution={priceEvolution} history={history} trucks={trucks} fmt={fmt} fmtN={fmtN} />}
           {activeTab==='vendedores'&& <AvanceVendedoresPanel vendedoresData={vendedoresData} loading={vendedoresLoading} onRefresh={fetchExcelData} fmt={fmt} />}
           {activeTab==='comparador'&& <ComparadorPreciosPanel fmt={fmt} />}
@@ -1349,6 +1401,8 @@ function AltaUnidadModal({initial={}, onSubmit, onClose}) {
         vtv_venc:    String(fd.get('vtvVenc')||''),
         seguro_poliza: String(fd.get('seguroPoliza')||''),
         vtv_poliza:    String(fd.get('vtvPoliza')||''),
+        seguroFile: seguroAdj.file,
+        vtvFile: vtvAdj.file,
       });
     } finally { setSaving(false); }
   };
@@ -1574,12 +1628,15 @@ function ExpenseModal({trucks, onSubmit, onClose}) {
   const [ticketFile, setTicketFile] = useState(null);
 
   // Gasto Fijo: sólo Combustible
-  // Gasto Variable: Mecánico, Gomería, Repuestos, Servicios
+  // Gasto Variable: categorías de mantenimiento compartidas con DriverView
   const VARS = [
-    {value:'mecanico',  label:'🔧 Mecánico'},
-    {value:'gomeria',   label:'🔄 Gomería'},
-    {value:'repuestos', label:'🛠 Repuestos'},
-    {value:'servicios', label:'📋 Servicios'},
+    {value:'mecanico',       label:'🔧 Mecánico'},
+    {value:'gomeria',        label:'🔄 Gomería'},
+    {value:'elastiquero',    label:'🛞 Elastiquero'},
+    {value:'electricista',   label:'⚡ Electricista'},
+    {value:'chapa_pintura',  label:'🎨 Chapa y Pintura'},
+    {value:'repuestos',      label:'🛠 Repuestos'},
+    {value:'servicios',      label:'📋 Servicios'},
   ];
 
   const canSubmit =
@@ -1614,6 +1671,12 @@ function ExpenseModal({trucks, onSubmit, onClose}) {
             <option value="">Seleccione Unidad...</option>
             {trucks.map((t) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
           </select>
+
+          <div>
+            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{color:'var(--oxford)'}}>Fecha del gasto</label>
+            <input name="expenseDate" type="date" defaultValue={getLocalDateISO()} max={getLocalDateISO()} required className="inp w-full p-3.5" />
+            <p className="text-[8px] mt-1" style={{color:'var(--oxford)'}}>Podés seleccionar hoy o una fecha anterior.</p>
+          </div>
 
           {/* ── Tipo principal ── */}
           <div className="space-y-2">
@@ -1656,7 +1719,7 @@ function ExpenseModal({trucks, onSubmit, onClose}) {
               </p>
               <div>
                 <label className="text-[7px] font-bold uppercase tracking-wider mb-1 block" style={{color:'var(--oxford)'}}>Litros Cargados *</label>
-                <input name="litros" type="number" step="0.01" required placeholder="0.00" className="inp w-full p-2.5 text-sm" />
+                <input name="litros" type="number" min="0.001" max="99999.999" step="0.001" pattern="[0-9]+([.,][0-9]{1,3})?" required placeholder="0.000" inputMode="decimal" className="inp w-full p-2.5 text-sm" />
               </div>
               <div>
                 <label className="text-[7px] font-bold uppercase tracking-wider mb-1 block" style={{color:'var(--oxford)'}}>Foto del Ticket (recomendado)</label>
@@ -1682,7 +1745,7 @@ function ExpenseModal({trucks, onSubmit, onClose}) {
           {tipoGasto==='variable' && (
             <div className="rounded-xl p-4 border space-y-3" style={{background:'#f8faff',borderColor:'var(--mist)'}}>
               <p className="text-[8px] font-bold uppercase tracking-wider" style={{color:'var(--oxford)'}}>Categoría del gasto</p>
-              <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                 {VARS.map(op => (
                   <button key={op.value} type="button"
                     onClick={() => setSubCat(op.value)}
@@ -1730,6 +1793,7 @@ function ExpenseModal({trucks, onSubmit, onClose}) {
 
 function EditExpenseModal({item,fmt,onSave,onClose}) {
   const [newAmount, setNewAmount] = useState(String(item.amount));
+  const [newDate,   setNewDate]   = useState(item.expenseDate || getLocalDateISO());
   const [motivo,     setMotivo]    = useState('');
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 overlay">
@@ -1746,6 +1810,10 @@ function EditExpenseModal({item,fmt,onSave,onClose}) {
             <input type="number" value={newAmount} onChange={e => setNewAmount(e.target.value)}
               className="w-full p-4 rounded-2xl text-2xl font-black text-center text-white outline-none"
               style={{background:'linear-gradient(135deg,var(--navy),var(--navy-3))'}} />
+          </div>
+          <div>
+            <label className="text-[8px] font-bold uppercase block mb-1" style={{color:'var(--oxford)'}}>Nueva fecha</label>
+            <input type="date" value={newDate} max={getLocalDateISO()} required onChange={e => setNewDate(e.target.value)} className="inp w-full p-3.5" />
           </div>
           <div>
             <label className="text-[8px] font-bold uppercase block mb-1" style={{color:'var(--oxford)'}}>Motivo del cambio</label>
@@ -1769,7 +1837,7 @@ function EditExpenseModal({item,fmt,onSave,onClose}) {
         </div>
         <div className="flex gap-3 mt-5">
           <button onClick={onClose} className="flex-1 p-3.5 rounded-xl font-bold text-xs uppercase" style={{background:'var(--ice)',color:'var(--oxford)'}}>Cancelar</button>
-          <button onClick={() => onSave(item,newAmount,motivo)} className="flex-1 p-3.5 text-white rounded-xl font-bold text-xs uppercase"
+          <button onClick={() => onSave(item,newAmount,motivo,newDate)} className="flex-1 p-3.5 text-white rounded-xl font-bold text-xs uppercase"
             style={{background:'linear-gradient(135deg,#1d4ed8,#2563eb)'}}>Guardar Cambio</button>
         </div>
       </div>
@@ -1779,12 +1847,15 @@ function EditExpenseModal({item,fmt,onSave,onClose}) {
 
 // ─── HISTORY TABLE ────────────────────────────────────────────────────────────
 
-function HistoryTable({allPeriod,trucks,truckFilter,onTruckFilter,onBaja,onEdit,fmt,onExport}) {
+function HistoryTable({allPeriod,trucks,truckFilter,onTruckFilter,onBaja,onEdit,canManage,fmt,onExport}) {
   const [showBaja, setShowBaja] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const categories = [...new Set(allPeriod.map(item => item.categoryLabel).filter(Boolean))].sort();
   const displayed = allPeriod.filter((h) => {
     const okBaja  = showBaja?true:(h.status!=='baja');
     const okTruck = truckFilter?h.truckId===truckFilter:true;
-    return okBaja&&okTruck;
+    const okCategory = categoryFilter ? h.categoryLabel === categoryFilter : true;
+    return okBaja&&okTruck&&okCategory;
   });
   const total = displayed.filter((h)=>h.status!=='baja').reduce((a,h)=>a+Number(h.amount),0);
 
@@ -1801,6 +1872,10 @@ function HistoryTable({allPeriod,trucks,truckFilter,onTruckFilter,onBaja,onEdit,
           <select value={truckFilter} onChange={e=>onTruckFilter(e.target.value)} className="bg-[#0b0f19] border border-slate-800 text-white rounded-xl text-xs px-3 py-2 outline-none">
             <option value="">Todas las unidades</option>
             {trucks.map((t) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
+          </select>
+          <select value={categoryFilter} onChange={e=>setCategoryFilter(e.target.value)} className="bg-[#0b0f19] border border-slate-800 text-white rounded-xl text-xs px-3 py-2 outline-none">
+            <option value="">Todas las categorías</option>
+            {categories.map(category => <option key={category} value={category}>{category}</option>)}
           </select>
           <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer whitespace-nowrap text-slate-400">
             <input type="checkbox" checked={showBaja} onChange={e=>setShowBaja(e.target.checked)} className="rounded bg-[#0b0f19] border-slate-800 text-blue-500" />
@@ -1849,7 +1924,7 @@ function HistoryTable({allPeriod,trucks,truckFilter,onTruckFilter,onBaja,onEdit,
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
-                      {!esBaja&&<>
+                      {!esBaja&&canManage&&<>
                         <button onClick={() => onEdit(item)} className="p-1.5 rounded-lg transition-all text-slate-500 hover:text-white hover:bg-slate-800"><Edit2 size={12}/></button>
                         <button onClick={() => onBaja(item)} className="p-1.5 rounded-lg transition-all text-slate-500 hover:text-red-400 hover:bg-red-500/10"><Ban size={12}/></button>
                       </>}
@@ -1876,8 +1951,8 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}) {
 
   const handleFuel = async (e) => {
     e.preventDefault(); setSaving(true);
-    await onSubmit(e,{category:'combustible',fotoTicket:ticketFile});
-    setSaving(false); setStep('done');
+    const saved = await onSubmit(e,{category:'combustible',fotoTicket:ticketFile});
+    setSaving(false); if (saved) setStep('done');
   };
 
   const handleMaint = async (e) => {
@@ -1885,8 +1960,8 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}) {
     const fd = new FormData(e.currentTarget);
     const subCat     = fd.get('subCat');
     const variosDesc = fd.get('variosDesc');
-    await onSubmit(e,{category:subCat||'varios',variosDesc:subCat==='varios'?variosDesc:''});
-    setSaving(false); setStep('done');
+    const saved = await onSubmit(e,{category:subCat||'varios',variosDesc:subCat==='varios'?variosDesc:''});
+    setSaving(false); if (saved) setStep('done');
   };
 
   if (step==='done') return (
@@ -1941,8 +2016,13 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}) {
               {trucks.map((t) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
             </select>
             <div className="card p-4">
+              <p className="text-[8px] font-bold uppercase mb-2" style={{color:'var(--oxford)'}}>Fecha del gasto</p>
+              <input name="expenseDate" type="date" defaultValue={getLocalDateISO()} max={getLocalDateISO()} required className="inp w-full p-3" />
+              <p className="text-[8px] mt-1" style={{color:'var(--oxford)'}}>Podés seleccionar hoy o una fecha anterior.</p>
+            </div>
+            <div className="card p-4">
               <p className="text-[8px] font-bold uppercase mb-2" style={{color:'var(--oxford)'}}>Litros *</p>
-              <input name="litros" type="number" inputMode="decimal" step="0.01" placeholder="0.00" required
+              <input name="litros" type="number" inputMode="decimal" min="0.001" max="99999.999" step="0.001" pattern="[0-9]+([.,][0-9]{1,3})?" placeholder="0.000" required
                 className="w-full font-data text-2xl font-black outline-none bg-transparent" style={{color:'#0ea5e9'}} />
             </div>
             <div className="card p-5">
@@ -1981,12 +2061,17 @@ function DriverView({trucks, userEmail, onSubmit, onSignOut}) {
               <option value="">Seleccioná tu camión...</option>
               {trucks.map((t) => <option key={t.id} value={t.id}>{t.patente} — {t.chofer}</option>)}
             </select>
+            <div className="card p-4">
+              <p className="text-[8px] font-bold uppercase mb-2" style={{color:'var(--oxford)'}}>Fecha del gasto</p>
+              <input name="expenseDate" type="date" defaultValue={getLocalDateISO()} max={getLocalDateISO()} required className="inp w-full p-3" />
+              <p className="text-[8px] mt-1" style={{color:'var(--oxford)'}}>Podés seleccionar hoy o una fecha anterior.</p>
+            </div>
             <div>
               <p className="text-[8px] font-bold uppercase mb-2" style={{color:'var(--oxford)'}}>Tipo de trabajo *</p>
               <select name="subCat" required className="inp w-full p-4 text-base font-bold">
                 <option value="">Seleccionar...</option>
-                {[['mecanico','Mecánico'],['elastiquero','Elastiquero'],['chapista','Chapista'],['tapicero','Tapicero'],
-                  ['gomeria','Gomería'],['electricista','Electricista'],['neumaticos','Neumáticos'],['taller','Taller General'],['varios','Otros / Varios']
+                {[['mecanico','Mecánico'],['gomeria','Gomería'],['elastiquero','Elastiquero'],['electricista','Electricista'],
+                  ['chapa_pintura','Chapa y Pintura'],['repuestos','Repuestos'],['servicios','Servicios'],['varios','Otros / Varios']
                 ].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
